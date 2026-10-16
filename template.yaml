@@ -14,7 +14,6 @@ Globals:
       Variables:
         NODE_OPTIONS: --enable-source-maps
 
-Resources:
   GotitaApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -32,10 +31,16 @@ Resources:
       Events:
         Stations:
           Type: HttpApi
-          Properties: { ApiId: !Ref GotitaApi, Path: /api/weather/stations, Method: GET }
+          Properties:
+            ApiId: !Ref GotitaApi
+            Path: /api/weather/stations
+            Method: GET
         Outlook:
           Type: HttpApi
-          Properties: { ApiId: !Ref GotitaApi, Path: /api/weather/outlook, Method: GET }
+          Properties:
+            ApiId: !Ref GotitaApi
+            Path: /api/weather/outlook
+            Method: GET
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -54,7 +59,10 @@ Resources:
       Events:
         Sources:
           Type: HttpApi
-          Properties: { ApiId: !Ref GotitaApi, Path: /api/fuentes-oficiales, Method: GET }
+          Properties:
+            ApiId: !Ref GotitaApi
+            Path: /api/fuentes-oficiales
+            Method: GET
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -73,7 +81,10 @@ Resources:
       Events:
         Emergencies:
           Type: HttpApi
-          Properties: { ApiId: !Ref GotitaApi, Path: /api/indeci/emergencias, Method: GET }
+          Properties:
+            ApiId: !Ref GotitaApi
+            Path: /api/indeci/emergencias
+            Method: GET
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -92,7 +103,10 @@ Resources:
       Events:
         Communiques:
           Type: HttpApi
-          Properties: { ApiId: !Ref GotitaApi, Path: /api/enfen/comunicados, Method: GET }
+          Properties:
+            ApiId: !Ref GotitaApi
+            Path: /api/enfen/comunicados
+            Method: GET
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -114,10 +128,16 @@ Resources:
       Events:
         Root:
           Type: HttpApi
-          Properties: { ApiId: !Ref GotitaApi, Path: /, Method: GET }
+          Properties:
+            ApiId: !Ref GotitaApi
+            Path: /
+            Method: GET
         Static:
           Type: HttpApi
-          Properties: { ApiId: !Ref GotitaApi, Path: /{proxy+}, Method: GET }
+          Properties:
+            ApiId: !Ref GotitaApi
+            Path: '/{proxy+}'
+            Method: GET
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -135,7 +155,8 @@ Resources:
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
