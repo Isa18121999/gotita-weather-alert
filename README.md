@@ -27,12 +27,7 @@ Frontend React                   |
                            |              |
                            v              v
                        SENAMHI WIS2   fuentes oficiales
-
 ```
-
-AWS documenta este patrón serverless con CloudFront/S3 para la presentación y API Gateway + Lambda para la lógica. citeturn0search0turn0search1
-
-La infraestructura se declara en `template.yaml`. AWS SAM puede compilar funciones Lambda TypeScript con esbuild. citeturn1search0turn1search2
 
 ## Despliegue AWS
 
@@ -45,7 +40,7 @@ Requisitos:
 Comandos:
 
 ```bash
-npm ci
+npm install
 npm run build
 sam build --template-file template.yaml
 npm run aws:deploy
