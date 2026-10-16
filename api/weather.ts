@@ -1,9 +1,16 @@
 import { PERU_STATIONS, riskFor, UMBRAL_ROJO_MM, type WeatherStation } from '../src/data/stations.ts';
 
 const CACHE_MS = 10 * 60 * 1000;
-let cache: { at: number; stations: WeatherStation[]; source: string } | null = null;
+const SENAMHI_COLLECTION = 'https://wis.senamhi.gob.pe/oapi/collections/urn%3Awmo%3Amd%3Ape-senamhi%3Asynop-hourly/items';
 const queryCoords = () => `latitude=${PERU_STATIONS.map(s => s.lat).join(',')}&longitude=${PERU_STATIONS.map(s => s.lng).join(',')}`;
-const SENAMHI_WIS = 'https://wis.senamhi.gob.pe/oapi/collections/urn%3Awmo%3Amd%3Ape-senamhi%3Asynop-hourly/items?f=json&bbox=-82,-19,-68,0&limit=100';
+let cache: { at: number; stations: WeatherStation[]; source: string } | null = null;
+
+type Observation = { station: WeatherStation; time: number; precipitation: number | null; temperature: number | null; windKmh: number | null };
+
+function numeric(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
 
 function nearestStation(lat: number, lng: number) {
   return PERU_STATIONS.reduce((best, station) => {
@@ -12,53 +19,111 @@ function nearestStation(lat: number, lng: number) {
   }, { station: PERU_STATIONS[0], distance: Number.POSITIVE_INFINITY });
 }
 
-function numeric(value: unknown): number | null {
-  const n = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(n) ? n : null;
+function getTime(props: any): number | null {
+  const value = props?.datetime ?? props?.time ?? props?.observation_time ?? props?.date;
+  const parsed = value ? new Date(value).getTime() : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getPrecipitation(props: any): number | null {
+  return numeric(props?.precipitation ?? props?.precipitation_amount ?? props?.precipitationAmount ?? props?.pr);
+}
+
+function getTemperature(props: any): number | null {
+  return numeric(props?.temperature ?? props?.air_temperature ?? props?.t);
+}
+
+function getWindKmh(props: any): number | null {
+  const mps = numeric(props?.wind_speed ?? props?.windSpeed ?? props?.ff);
+  if (mps !== null) return Math.round(mps * 3.6 * 10) / 10;
+  return numeric(props?.windKmh ?? props?.wind_kmh);
+}
+
+async function consultarSENAMHI(start: Date, end: Date): Promise<Observation[]> {
+  const params = new URLSearchParams({
+    f: 'json',
+    bbox: '-82,-19,-68,0',
+    datetime: `${start.toISOString()}/${end.toISOString()}`,
+    limit: '1000',
+  });
+  const response = await fetch(`${SENAMHI_COLLECTION}?${params.toString()}`, {
+    signal: AbortSignal.timeout(20000),
+    headers: { Accept: 'application/geo+json, application/json' },
+  });
+  if (!response.ok) throw new Error(`SENAMHI WIS2 respondió ${response.status}`);
+  const raw = await response.json();
+  const features = Array.isArray(raw?.features) ? raw.features : [];
+  const observations: Observation[] = [];
+
+  for (const feature of features) {
+    const coords = feature?.geometry?.coordinates;
+    if (!Array.isArray(coords) || coords.length < 2) continue;
+    const lng = numeric(coords[0]);
+    const lat = numeric(coords[1]);
+    if (lat === null || lng === null) continue;
+    const match = nearestStation(lat, lng);
+    // Evita asignar una observación oficial a una estación GÓTITA geográficamente distante.
+    if (match.distance > 0.35) continue;
+    const props = feature?.properties ?? {};
+    const time = getTime(props);
+    if (time === null) continue;
+    observations.push({
+      station: match.station,
+      time,
+      precipitation: getPrecipitation(props),
+      temperature: getTemperature(props),
+      windKmh: getWindKmh(props),
+    });
+  }
+  return observations;
+}
+
+function buildOfficialStations(observations: Observation[]): WeatherStation[] {
+  const byStation = new Map<string, Observation[]>();
+  for (const observation of observations) {
+    const list = byStation.get(observation.station.id) ?? [];
+    list.push(observation);
+    byStation.set(observation.station.id, list);
+  }
+
+  const now = Date.now();
+  return PERU_STATIONS.map(station => {
+    const rows = (byStation.get(station.id) ?? []).sort((a, b) => a.time - b.time);
+    const latest = rows.at(-1);
+    const rainRows = rows.filter(r => r.precipitation !== null);
+    const rain1h = rainRows.filter(r => r.time >= now - 60 * 60 * 1000).reduce((sum, r) => sum + (r.precipitation ?? 0), 0);
+    const rain6h = rainRows.filter(r => r.time >= now - 6 * 60 * 60 * 1000).reduce((sum, r) => sum + (r.precipitation ?? 0), 0);
+    const rain24h = rainRows.filter(r => r.time >= now - 24 * 60 * 60 * 1000).reduce((sum, r) => sum + (r.precipitation ?? 0), 0);
+    const observed24h = Math.round(rain24h * 10) / 10;
+    const latestRain = latest?.precipitation ?? 0;
+    const riskRain = observed24h > 0 ? observed24h : latestRain;
+    return {
+      ...station,
+      precipitationMm: observed24h,
+      riskLevel: riskFor(riskRain),
+      thresholdRedMm: UMBRAL_ROJO_MM,
+      updatedMinutesAgo: latest ? Math.max(0, Math.round((now - latest.time) / 60000)) : 0,
+      current: {
+        temperatureC: latest?.temperature ?? null,
+        precipitationMm: latestRain,
+        rainMm: latestRain,
+        windKmh: latest?.windKmh ?? null,
+        time: latest ? new Date(latest.time).toISOString() : null,
+      },
+      source: 'SENAMHI WIS2',
+      // Campos extendidos consumidos por el dashboard sin alterar el contrato base.
+      ...( { precipitation1hMm: Math.round(rain1h * 10) / 10, precipitation6hMm: Math.round(rain6h * 10) / 10, precipitation24hMm: observed24h } as any ),
+    } as WeatherStation;
+  });
 }
 
 async function obtenerSENAMHI(): Promise<WeatherStation[] | null> {
   try {
-    const response = await fetch(SENAMHI_WIS, { signal: AbortSignal.timeout(12000), headers: { Accept: 'application/json' } });
-    if (!response.ok) return null;
-    const raw = await response.json();
-    const features = Array.isArray(raw?.features) ? raw.features : [];
-    if (!features.length) return null;
-
-    const latest = new Map<string, { temperature: number | null; precipitation: number | null; time: string | null }>();
-    for (const feature of features) {
-      const coords = feature?.geometry?.coordinates;
-      if (!Array.isArray(coords) || coords.length < 2) continue;
-      const lng = numeric(coords[0]);
-      const lat = numeric(coords[1]);
-      if (lat === null || lng === null) continue;
-      const match = nearestStation(lat, lng);
-      if (match.distance > 1.25) continue;
-      const props = feature?.properties ?? {};
-      const time = props.datetime ?? props.time ?? props.observation_time ?? null;
-      const previous = latest.get(match.station.id);
-      if (previous && previous.time && time && new Date(previous.time).getTime() >= new Date(time).getTime()) continue;
-      latest.set(match.station.id, {
-        temperature: numeric(props.temperature ?? props.air_temperature ?? props.t),
-        precipitation: numeric(props.precipitation ?? props.precipitation_amount ?? props.pr),
-        time,
-      });
-    }
-    if (!latest.size) return null;
-
-    return PERU_STATIONS.map(station => {
-      const obs = latest.get(station.id);
-      const rain = obs?.precipitation ?? 0;
-      return {
-        ...station,
-        precipitationMm: Math.round(rain * 10) / 10,
-        riskLevel: riskFor(rain),
-        thresholdRedMm: UMBRAL_ROJO_MM,
-        updatedMinutesAgo: obs?.time ? Math.max(0, Math.round((Date.now() - new Date(obs.time).getTime()) / 60000)) : 0,
-        current: { temperatureC: obs?.temperature ?? null, precipitationMm: obs?.precipitation ?? null, rainMm: obs?.precipitation ?? null, windKmh: null, time: obs?.time ?? null },
-        source: 'SENAMHI WIS2',
-      } as WeatherStation;
-    });
+    const end = new Date();
+    const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+    const observations = await consultarSENAMHI(start, end);
+    if (!observations.length) return null;
+    return buildOfficialStations(observations);
   } catch {
     return null;
   }
@@ -75,7 +140,7 @@ async function obtenerOpenMeteo(): Promise<WeatherStation[]> {
     const hourly = Array.isArray(row?.hourly?.precipitation) ? row.hourly.precipitation : [];
     const rain24 = hourly.reduce((sum: number, v: number | null) => sum + (v ?? 0), 0);
     const currentTime = row?.current?.time ? new Date(row.current.time).getTime() : Date.now();
-    return { ...station, precipitationMm: Math.round(rain24 * 10) / 10, riskLevel: riskFor(rain24), thresholdRedMm: UMBRAL_ROJO_MM, updatedMinutesAgo: Math.max(0, Math.round((Date.now() - currentTime) / 60000)), current: { temperatureC: row?.current?.temperature_2m ?? null, precipitationMm: row?.current?.precipitation ?? null, rainMm: row?.current?.rain ?? null, windKmh: row?.current?.wind_speed_10m ?? null, time: row?.current?.time ?? null }, source: 'Open-Meteo (respaldo)' } as WeatherStation;
+    return { ...station, precipitationMm: Math.round(rain24 * 10) / 10, riskLevel: riskFor(rain24), thresholdRedMm: UMBRAL_ROJO_MM, updatedMinutesAgo: Math.max(0, Math.round((Date.now() - currentTime) / 60000)), current: { temperatureC: row?.current?.temperature_2m ?? null, precipitationMm: row?.current?.precipitation ?? null, rainMm: row?.current?.rain ?? null, windKmh: row?.current?.wind_speed_10m ?? null, time: row?.current?.time ?? null }, source: 'Open-Meteo (respaldo)', ...( { precipitation1hMm: row?.current?.precipitation ?? 0, precipitation6hMm: null, precipitation24hMm: Math.round(rain24 * 10) / 10 } as any ) } as WeatherStation;
   });
 }
 
@@ -90,7 +155,14 @@ async function obtenerLluvias() {
 
 export async function obtenerEstaciones() {
   const data = await obtenerLluvias();
-  return { stations: data.stations, source: data.source, generatedAt: new Date().toISOString(), note: data.source === 'SENAMHI WIS2' ? 'Observaciones consultadas desde el servicio WIS de SENAMHI. La coincidencia se realiza por proximidad a las estaciones de GÓTITA.' : 'No se pudo consultar SENAMHI WIS2; se utiliza Open-Meteo únicamente como respaldo de prototipo.' };
+  return {
+    stations: data.stations,
+    source: data.source,
+    generatedAt: new Date().toISOString(),
+    note: data.source === 'SENAMHI WIS2'
+      ? 'Observaciones horarias consultadas desde SENAMHI WIS2 y agregadas a ventanas de 1 h, 6 h y 24 h. La coincidencia con GÓTITA se realiza por proximidad geográfica y solo dentro de 0.35 grados.'
+      : 'No se pudo consultar SENAMHI WIS2; se utiliza Open-Meteo únicamente como respaldo de prototipo.',
+  };
 }
 
 export async function obtenerPronostico() {
@@ -116,13 +188,5 @@ export async function responderWeather(ruta: string) {
 export const handler = async (event: { rawPath?: string; requestContext?: { http?: { path?: string } } } = {}) => {
   const ruta = event.rawPath ?? event.requestContext?.http?.path ?? '/api/weather/stations';
   const { status, body } = await responderWeather(ruta);
-  return {
-    statusCode: status,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'public, max-age=60',
-    },
-    body,
-  };
+  return { statusCode: status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }, body };
 };
