@@ -1,3 +1,31 @@
 import type { WeatherStation } from '../data/stations';
-export function InicioPage({stations,selectedStation,onSelectStation,dataStatus,onRetry,onNavigate}:{stations:WeatherStation[];selectedStation:WeatherStation;onSelectStation:(s:WeatherStation)=>void;dataStatus:string;onRetry:()=>void;onNavigate:(p:'mapa'|'alertas'|'noticias'|'inicio')=>void}){return <section className="max-w-6xl mx-auto px-5 py-28"><div className="rounded-3xl bg-[#E3F2FD] p-8 mb-8"><p className="text-[#1565C0] font-bold">GÓTITA / PLUVIX</p><h1 className="text-4xl font-bold mt-2">Tu alerta antes de la lluvia</h1><p className="mt-3 max-w-2xl">Monitoreo de precipitaciones y riesgo para Costa, Sierra y Selva del Perú.</p></div><div className="flex flex-wrap gap-3 mb-6">{stations.slice(0,8).map(s=><button key={s.id} onClick={()=>onSelectStation(s)} className={`px-4 py-2 rounded-full border ${selectedStation.id===s.id?'bg-[#1565C0] text-white':'bg-white'}`}>{s.department}</button>)}</div><div className="grid md:grid-cols-4 gap-4"><Card title="Estación" value={selectedStation.name}/><Card title="Lluvia 24 h" value={`${selectedStation.precipitationMm.toFixed(1)} mm`}/><Card title="Riesgo" value={selectedStation.riskLevel}/><Card title="Temperatura" value={`${selectedStation.current?.temperatureC??'—'} °C`}/></div><div className="mt-6 flex gap-3"><button onClick={()=>onNavigate('mapa')} className="px-5 py-3 rounded-xl bg-[#1565C0] text-white">Explorar mapa</button><button onClick={()=>onNavigate('alertas')} className="px-5 py-3 rounded-xl border">Ver alertas</button><button onClick={onRetry} className="px-5 py-3 rounded-xl border">Actualizar ({dataStatus})</button></div></section>}
-function Card({title,value}:{title:string;value:string}){return <div className="rounded-2xl border p-5 bg-white shadow-sm"><div className="text-sm text-gray-500">{title}</div><div className="font-bold mt-2">{value}</div></div>}
+
+export function InicioPage({stations,selectedStation,onSelectStation,dataStatus,onRetry,onNavigate}:{stations:WeatherStation[];selectedStation:WeatherStation;onSelectStation:(s:WeatherStation)=>void;dataStatus:string;onRetry:()=>void;onNavigate:(p:'mapa'|'alertas'|'noticias'|'inicio')=>void}) {
+  const risk = selectedStation.riskLevel.toUpperCase();
+  const riskClass = risk === 'ALTO' ? 'bg-red-100 text-red-700' : risk === 'MEDIO' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700';
+  return <>
+    <section className="bg-gradient-to-b from-[#E3F2FD] to-white">
+      <div className="max-w-6xl mx-auto px-5 pt-28 pb-16">
+        <div className="max-w-3xl">
+          <p className="text-[#1565C0] font-bold tracking-widest">GÓTITA · TU ALERTA ANTES DE LA LLUVIA</p>
+          <h1 className="text-5xl md:text-6xl font-extrabold leading-tight mt-3">Anticípate a la lluvia.<br/><span className="text-[#1565C0]">Prepárate a tiempo.</span></h1>
+          <p className="mt-5 text-lg text-slate-600">Monitoreo de precipitaciones y señales oficiales para Costa, Sierra y Selva del Perú, en un solo lugar.</p>
+          <div className="flex flex-wrap gap-3 mt-7"><button onClick={()=>onNavigate('mapa')} className="px-5 py-3 rounded-xl bg-[#1565C0] text-white font-semibold">Explorar mapa interactivo</button><button onClick={()=>onNavigate('alertas')} className="px-5 py-3 rounded-xl border bg-white font-semibold">Ver alertas vigentes</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section className="max-w-6xl mx-auto px-5 py-10">
+      <div className="flex items-center justify-between gap-4 mb-5"><div><p className="text-sm text-slate-500">Monitoreo en tiempo real</p><h2 className="text-2xl font-bold">¿Cómo está la lluvia en {selectedStation.department}?</h2></div><button onClick={onRetry} className="px-4 py-2 rounded-xl border bg-white">Actualizar</button></div>
+      <div className="flex flex-wrap gap-2 mb-6">{stations.map(s=><button key={s.id} onClick={()=>onSelectStation(s)} className={`px-4 py-2 rounded-full border text-sm ${selectedStation.id===s.id?'bg-[#1565C0] text-white border-[#1565C0]':'bg-white'}`}>{s.department} · {s.region}</button>)}</div>
+      <div className="rounded-3xl border bg-white shadow-sm p-6 md:p-8">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6"><div><p className="text-sm text-slate-500">Estación seleccionada</p><h3 className="text-2xl font-bold mt-1">{selectedStation.name}</h3><p className="text-sm text-slate-500 mt-1">{selectedStation.department} · {selectedStation.region}</p></div><span className={`px-4 py-2 rounded-full font-bold self-start ${riskClass}`}>RIESGO {risk}</span></div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-7"><Card title="Lluvia acumulada 24 h" value={`${selectedStation.precipitationMm.toFixed(1)} mm`} /><Card title="Temperatura" value={`${selectedStation.current?.temperatureC ?? '—'} °C`} /><Card title="Viento" value={`${selectedStation.current?.windKmh ?? '—'} km/h`} /><Card title="Última actualización" value={selectedStation.updatedMinutesAgo === 0 ? 'Ahora' : `Hace ${selectedStation.updatedMinutesAgo} min`} /></div>
+        <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">Fuente meteorológica actual: <strong>{selectedStation.source}</strong>. Para una versión operativa, los datos de observación deberán validarse contra la fuente oficial correspondiente.</div>
+      </div>
+    </section>
+
+    <section className="max-w-6xl mx-auto px-5 py-10"><div className="grid md:grid-cols-3 gap-5"><div className="rounded-2xl border p-6"><p className="text-sm text-slate-500">Fases de prevención</p><h3 className="font-bold text-xl mt-2">Preparación</h3><p className="text-sm text-slate-600 mt-2">Conoce tu nivel de riesgo y revisa las recomendaciones oficiales antes de una emergencia.</p></div><div className="rounded-2xl border p-6"><p className="text-sm text-slate-500">El Niño</p><h3 className="font-bold text-xl mt-2">Seguimiento ENFEN</h3><p className="text-sm text-slate-600 mt-2">GÓTITA separa el indicador climático oficial del cálculo local de riesgo por lluvia.</p></div><div className="rounded-2xl border p-6"><p className="text-sm text-slate-500">Estado de datos</p><h3 className="font-bold text-xl mt-2">{dataStatus}</h3><p className="text-sm text-slate-600 mt-2">La interfaz muestra cuándo una fuente no está disponible para evitar presentar datos inventados como oficiales.</p></div></div></section>
+  </>;
+}
+function Card({title,value}:{title:string;value:string}){return <div className="rounded-2xl border p-5 bg-white"><div className="text-sm text-slate-500">{title}</div><div className="font-bold text-xl mt-2">{value}</div></div>}
