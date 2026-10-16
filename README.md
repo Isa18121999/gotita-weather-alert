@@ -1,6 +1,6 @@
 # GÓTITA — tu alerta antes de la lluvia
 
-Plataforma de alerta temprana del fenómeno de El Niño y precipitaciones en Perú, basada en la Propuesta 1 y el proyecto Pluvix.
+GÓTITA es una plataforma de alerta temprana del fenómeno de El Niño y precipitaciones en Perú, basada en la Propuesta 1. El nombre oficial del proyecto es **GÓTITA**; las referencias a Pluvix se han retirado de la documentación.
 
 ## Funcionalidades
 
