@@ -13,7 +13,7 @@ if ! aws sts get-caller-identity --region "$AWS_REGION" >/dev/null 2>&1; then
 fi
 
 echo "==> Instalando dependencias y compilando frontend"
-npm ci
+npm install
 npm run build
 
 echo "==> Construyendo Lambdas con AWS SAM"
