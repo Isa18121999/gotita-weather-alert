@@ -1,0 +1,5 @@
+import { useEffect,useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import type { WeatherStation } from '../data/stations';
+export function PeruMap({stations,onSelect}:{stations:WeatherStation[];onSelect?:(s:WeatherStation)=>void}){const ref=useRef<HTMLDivElement>(null);useEffect(()=>{if(!ref.current)return;const map=L.map(ref.current).setView([-9.2,-75.0],5);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);stations.forEach(s=>{const color=s.riskLevel==='ALTO'?'#EF4444':s.riskLevel==='MEDIO'?'#F59E0B':'#22C55E';const marker=L.circleMarker([s.lat,s.lng],{radius:8,color,fillColor:color,fillOpacity:.85}).addTo(map);marker.bindPopup(`<b>${s.name}</b><br/>${s.department}<br/>Lluvia 24 h: ${s.precipitationMm.toFixed(1)} mm<br/>Riesgo: ${s.riskLevel}`);marker.on('click',()=>onSelect?.(s));});return()=>{map.remove()}},[stations,onSelect]);return <div ref={ref} className="w-full h-[520px] rounded-2xl overflow-hidden border border-[#BBDEFB]"/>}
