@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: GÓTITA - plataforma de alerta temprana de lluvias en Peru. Frontend en S3/CloudFront y API serverless con API Gateway + Lambda.
+Description: GÓTITA - plataforma de alerta temprana de lluvias en Peru. Arquitectura compatible con AWS Academy Learner Lab usando S3 privado + API Gateway + Lambda.
 
 Globals:
   Function:
@@ -9,6 +9,7 @@ Globals:
     Timeout: 30
     Architectures:
       - x86_64
+    Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/LabRole'
     Environment:
       Variables:
         NODE_OPTIONS: --enable-source-maps
@@ -102,6 +103,31 @@ Resources:
         Sourcemap: true
         OutExtension: ['.js=.mjs']
 
+  WebFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: api/web.handler
+      Environment:
+        Variables:
+          WEB_BUCKET: !Ref WebBucket
+      Events:
+        Root:
+          Type: HttpApi
+          Properties: { ApiId: !Ref GotitaApi, Path: /, Method: GET }
+        Static:
+          Type: HttpApi
+          Properties: { ApiId: !Ref GotitaApi, Path: /{proxy+}, Method: GET }
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [api/web.ts]
+        Format: esm
+        Target: es2022
+        Minify: true
+        Sourcemap: true
+        OutExtension: ['.js=.mjs']
+
   WebBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
@@ -116,77 +142,13 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
-  CloudFrontOriginAccessControl:
-    Type: AWS::CloudFront::OriginAccessControl
-    Properties:
-      OriginAccessControlConfig:
-        Name: !Sub '${AWS::StackName}-oac'
-        Description: Acceso privado de CloudFront al bucket web de GÓTITA
-        OriginAccessControlOriginType: s3
-        SigningBehavior: always
-        SigningProtocol: sigv4
-
-  WebDistribution:
-    Type: AWS::CloudFront::Distribution
-    Properties:
-      DistributionConfig:
-        Enabled: true
-        DefaultRootObject: index.html
-        HttpVersion: http2and3
-        PriceClass: PriceClass_100
-        Origins:
-          - Id: GotitaS3Origin
-            DomainName: !GetAtt WebBucket.RegionalDomainName
-            S3OriginConfig: {}
-            OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
-          - Id: GotitaApiOrigin
-            DomainName: !Sub '${GotitaApi}.execute-api.${AWS::Region}.amazonaws.com'
-            CustomOriginConfig: { HTTPSPort: 443, OriginProtocolPolicy: https-only }
-        DefaultCacheBehavior:
-          TargetOriginId: GotitaS3Origin
-          ViewerProtocolPolicy: redirect-to-https
-          Compress: true
-          AllowedMethods: [GET, HEAD, OPTIONS]
-          CachedMethods: [GET, HEAD]
-          ForwardedValues: { QueryString: false, Cookies: { Forward: none } }
-        CacheBehaviors:
-          - PathPattern: /api/*
-            TargetOriginId: GotitaApiOrigin
-            ViewerProtocolPolicy: redirect-to-https
-            Compress: true
-            AllowedMethods: [GET, HEAD, OPTIONS]
-            CachedMethods: [GET, HEAD]
-            ForwardedValues: { QueryString: true, Cookies: { Forward: none } }
-        CustomErrorResponses:
-          - { ErrorCode: 403, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 0 }
-          - { ErrorCode: 404, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 0 }
-
-  WebBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket: !Ref WebBucket
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: AllowCloudFrontRead
-            Effect: Allow
-            Principal: { Service: cloudfront.amazonaws.com }
-            Action: s3:GetObject
-            Resource: !Sub '${WebBucket.Arn}/*'
-            Condition:
-              StringEquals:
-                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebDistribution}'
-
 Outputs:
   WebsiteUrl:
-    Description: URL publica de GÓTITA mediante CloudFront
-    Value: !Sub 'https://${WebDistribution.DomainName}'
+    Description: URL publica de GÓTITA mediante API Gateway + Lambda
+    Value: !Sub 'https://${GotitaApi}.execute-api.${AWS::Region}.amazonaws.com/'
   WebBucketName:
-    Description: Bucket S3 privado donde se publica el frontend
+    Description: Bucket S3 privado donde se almacenan los archivos del frontend
     Value: !Ref WebBucket
-  CloudFrontDistributionId:
-    Description: ID de la distribucion CloudFront
-    Value: !Ref WebDistribution
   ApiUrl:
     Description: Endpoint HTTP API de GÓTITA
     Value: !Sub 'https://${GotitaApi}.execute-api.${AWS::Region}.amazonaws.com'
