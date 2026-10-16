@@ -103,5 +103,26 @@ export async function obtenerPronostico() {
   return { outlook: result, source: 'Open-Meteo', generatedAt: new Date().toISOString(), note: 'Pronóstico de respaldo; no sustituye los pronósticos oficiales de SENAMHI.' };
 }
 
-export async function responderWeather(ruta: string) { try { if (ruta.endsWith('/weather/stations')) return { status: 200, body: JSON.stringify(await obtenerEstaciones()) }; if (ruta.endsWith('/weather/outlook')) return { status: 200, body: JSON.stringify(await obtenerPronostico()) }; return { status: 404, body: JSON.stringify({ error: 'Ruta no encontrada' }) }; } catch (error) { return { status: 502, body: JSON.stringify({ error: error instanceof Error ? error.message : String(error) }) }; } }
-export const handler = async () => { const { status, body } = await responderWeather('/weather/stations'); return { statusCode: status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' }, body }; };
+export async function responderWeather(ruta: string) {
+  try {
+    if (ruta.endsWith('/weather/stations')) return { status: 200, body: JSON.stringify(await obtenerEstaciones()) };
+    if (ruta.endsWith('/weather/outlook')) return { status: 200, body: JSON.stringify(await obtenerPronostico()) };
+    return { status: 404, body: JSON.stringify({ error: 'Ruta no encontrada' }) };
+  } catch (error) {
+    return { status: 502, body: JSON.stringify({ error: error instanceof Error ? error.message : String(error) }) };
+  }
+}
+
+export const handler = async (event: { rawPath?: string; requestContext?: { http?: { path?: string } } } = {}) => {
+  const ruta = event.rawPath ?? event.requestContext?.http?.path ?? '/api/weather/stations';
+  const { status, body } = await responderWeather(ruta);
+  return {
+    statusCode: status,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'public, max-age=60',
+    },
+    body,
+  };
+};
