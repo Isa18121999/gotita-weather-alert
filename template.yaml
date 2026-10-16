@@ -19,13 +19,9 @@ Resources:
     Properties:
       StageName: $default
       CorsConfiguration:
-        AllowMethods:
-          - GET
-          - OPTIONS
-        AllowHeaders:
-          - Content-Type
-        AllowOrigins:
-          - '*'
+        AllowMethods: [GET, OPTIONS]
+        AllowHeaders: [Content-Type]
+        AllowOrigins: ['*']
 
   WeatherFunction:
     Type: AWS::Serverless::Function
@@ -35,27 +31,19 @@ Resources:
       Events:
         Stations:
           Type: HttpApi
-          Properties:
-            ApiId: !Ref GotitaApi
-            Path: /api/weather/stations
-            Method: GET
+          Properties: { ApiId: !Ref GotitaApi, Path: /api/weather/stations, Method: GET }
         Outlook:
           Type: HttpApi
-          Properties:
-            ApiId: !Ref GotitaApi
-            Path: /api/weather/outlook
-            Method: GET
+          Properties: { ApiId: !Ref GotitaApi, Path: /api/weather/outlook, Method: GET }
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
-        EntryPoints:
-          - api/weather.ts
+        EntryPoints: [api/weather.ts]
         Format: esm
         Target: es2022
         Minify: true
         Sourcemap: true
-        OutExtension:
-          - .js=.mjs
+        OutExtension: ['.js=.mjs']
 
   OfficialSourcesFunction:
     Type: AWS::Serverless::Function
@@ -65,21 +53,54 @@ Resources:
       Events:
         Sources:
           Type: HttpApi
-          Properties:
-            ApiId: !Ref GotitaApi
-            Path: /api/fuentes-oficiales
-            Method: GET
+          Properties: { ApiId: !Ref GotitaApi, Path: /api/fuentes-oficiales, Method: GET }
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
-        EntryPoints:
-          - api/fuentes-oficiales.ts
+        EntryPoints: [api/fuentes-oficiales.ts]
         Format: esm
         Target: es2022
         Minify: true
         Sourcemap: true
-        OutExtension:
-          - .js=.mjs
+        OutExtension: ['.js=.mjs']
+
+  IndeciFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: api/indeci.handler
+      Events:
+        Emergencies:
+          Type: HttpApi
+          Properties: { ApiId: !Ref GotitaApi, Path: /api/indeci/emergencias, Method: GET }
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [api/indeci.ts]
+        Format: esm
+        Target: es2022
+        Minify: true
+        Sourcemap: true
+        OutExtension: ['.js=.mjs']
+
+  EnfenFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: api/enfen.handler
+      Events:
+        Communiques:
+          Type: HttpApi
+          Properties: { ApiId: !Ref GotitaApi, Path: /api/enfen/comunicados, Method: GET }
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [api/enfen.ts]
+        Format: esm
+        Target: es2022
+        Minify: true
+        Sourcemap: true
+        OutExtension: ['.js=.mjs']
 
   WebBucket:
     Type: AWS::S3::Bucket
@@ -88,8 +109,7 @@ Resources:
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -121,49 +141,25 @@ Resources:
             OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
           - Id: GotitaApiOrigin
             DomainName: !Sub '${GotitaApi}.execute-api.${AWS::Region}.amazonaws.com'
-            CustomOriginConfig:
-              HTTPSPort: 443
-              OriginProtocolPolicy: https-only
+            CustomOriginConfig: { HTTPSPort: 443, OriginProtocolPolicy: https-only }
         DefaultCacheBehavior:
           TargetOriginId: GotitaS3Origin
           ViewerProtocolPolicy: redirect-to-https
           Compress: true
-          AllowedMethods:
-            - GET
-            - HEAD
-            - OPTIONS
-          CachedMethods:
-            - GET
-            - HEAD
-          ForwardedValues:
-            QueryString: false
-            Cookies:
-              Forward: none
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          ForwardedValues: { QueryString: false, Cookies: { Forward: none } }
         CacheBehaviors:
           - PathPattern: /api/*
             TargetOriginId: GotitaApiOrigin
             ViewerProtocolPolicy: redirect-to-https
             Compress: true
-            AllowedMethods:
-              - GET
-              - HEAD
-              - OPTIONS
-            CachedMethods:
-              - GET
-              - HEAD
-            ForwardedValues:
-              QueryString: true
-              Cookies:
-                Forward: none
+            AllowedMethods: [GET, HEAD, OPTIONS]
+            CachedMethods: [GET, HEAD]
+            ForwardedValues: { QueryString: true, Cookies: { Forward: none } }
         CustomErrorResponses:
-          - ErrorCode: 403
-            ResponseCode: 200
-            ResponsePagePath: /index.html
-            ErrorCachingMinTTL: 0
-          - ErrorCode: 404
-            ResponseCode: 200
-            ResponsePagePath: /index.html
-            ErrorCachingMinTTL: 0
+          - { ErrorCode: 403, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 0 }
+          - { ErrorCode: 404, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 0 }
 
   WebBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -174,8 +170,7 @@ Resources:
         Statement:
           - Sid: AllowCloudFrontRead
             Effect: Allow
-            Principal:
-              Service: cloudfront.amazonaws.com
+            Principal: { Service: cloudfront.amazonaws.com }
             Action: s3:GetObject
             Resource: !Sub '${WebBucket.Arn}/*'
             Condition:
