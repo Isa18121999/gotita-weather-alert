@@ -1,4 +1,5 @@
 import { PERU_STATIONS, riskFor, UMBRAL_ROJO_MM, type WeatherStation } from '../src/data/stations.ts';
+import { SENAMHI_STATIONS } from '../src/data/senamhiStations.ts';
 
 const CACHE_MS = 10 * 60 * 1000;
 const SENAMHI_COLLECTION = 'https://wis.senamhi.gob.pe/oapi/collections/urn%3Awmo%3Amd%3Ape-senamhi%3Asynop-hourly/items';
@@ -18,14 +19,24 @@ function numeric(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function nearestStation(lat: number, lng: number) {
-  return PERU_STATIONS.reduce(
-    (best, station) => {
-      const distance = Math.hypot(station.lat - lat, station.lng - lng);
-      return distance < best.distance ? { station, distance } : best;
-    },
-    { station: PERU_STATIONS[0], distance: Number.POSITIVE_INFINITY },
-  );
+function normalize(value: unknown): string {
+  return String(value ?? '').trim().toUpperCase();
+}
+
+function getStationIdentifier(props: any): string | null {
+  const candidates = [
+    props?.station,
+    props?.station_id,
+    props?.stationId,
+    props?.station_code,
+    props?.stationCode,
+    props?.codigo_estacion,
+    props?.codigoEstacion,
+    props?.wigos_station_identifier,
+    props?.wigosStationIdentifier,
+  ];
+  const found = candidates.find(value => value !== null && value !== undefined && String(value).trim() !== '');
+  return found === undefined ? null : String(found);
 }
 
 function getTime(props: any): number | null {
@@ -48,6 +59,43 @@ function getWindKmh(props: any): number | null {
   return numeric(props?.windKmh ?? props?.wind_kmh);
 }
 
+function findVerifiedStation(feature: any): WeatherStation | null {
+  const props = feature?.properties ?? {};
+  const coords = feature?.geometry?.coordinates;
+  if (!Array.isArray(coords) || coords.length < 2) return null;
+
+  const lng = numeric(coords[0]);
+  const lat = numeric(coords[1]);
+  if (lat === null || lng === null) return null;
+
+  const identifier = normalize(getStationIdentifier(props));
+
+  // Primero intentamos identificar la estación por un identificador oficial.
+  if (identifier) {
+    const byCode = SENAMHI_STATIONS.find(station =>
+      station.verified && station.code && (
+        identifier === normalize(station.code) ||
+        identifier.endsWith(normalize(station.code)) ||
+        normalize(station.code).endsWith(identifier)
+      )
+    );
+    if (byCode) return PERU_STATIONS.find(s => s.id === byCode.gotitaId) ?? null;
+  }
+
+  // Para estaciones verificadas cuyo código WIS2 aún no está documentado,
+  // usamos únicamente la coordenada de ESA estación; no comparamos contra
+  // todas las estaciones GÓTITA ni elegimos la "más cercana".
+  const verified = SENAMHI_STATIONS.filter(station => station.verified);
+  const coordinateMatch = verified.find(station => {
+    const distance = Math.hypot(station.lat - lat, station.lng - lng);
+    return distance <= 0.02;
+  });
+
+  return coordinateMatch
+    ? PERU_STATIONS.find(s => s.id === coordinateMatch.gotitaId) ?? null
+    : null;
+}
+
 async function consultarSENAMHI(start: Date, end: Date): Promise<Observation[]> {
   const params = new URLSearchParams({
     f: 'json',
@@ -68,22 +116,15 @@ async function consultarSENAMHI(start: Date, end: Date): Promise<Observation[]> 
   const observations: Observation[] = [];
 
   for (const feature of features) {
-    const coords = feature?.geometry?.coordinates;
-    if (!Array.isArray(coords) || coords.length < 2) continue;
-
-    const lng = numeric(coords[0]);
-    const lat = numeric(coords[1]);
-    if (lat === null || lng === null) continue;
-
-    const match = nearestStation(lat, lng);
-    if (match.distance > 0.35) continue;
+    const station = findVerifiedStation(feature);
+    if (!station) continue;
 
     const props = feature?.properties ?? {};
     const time = getTime(props);
     if (time === null) continue;
 
     observations.push({
-      station: match.station,
+      station,
       time,
       precipitation: getPrecipitation(props),
       temperature: getTemperature(props),
@@ -122,6 +163,7 @@ function buildOfficialStations(observations: Observation[]): WeatherStation[] {
     const observed24h = Math.round(rain24h * 10) / 10;
     const latestRain = latest?.precipitation ?? 0;
     const riskRain = observed24h > 0 ? observed24h : latestRain;
+    const senamhi = SENAMHI_STATIONS.find(item => item.gotitaId === station.id && item.verified);
 
     return {
       ...station,
@@ -136,7 +178,7 @@ function buildOfficialStations(observations: Observation[]): WeatherStation[] {
         windKmh: latest?.windKmh ?? null,
         time: latest ? new Date(latest.time).toISOString() : null,
       },
-      source: 'SENAMHI WIS2',
+      source: senamhi ? 'SENAMHI WIS2' : 'SENAMHI WIS2 · estación no verificada',
       ...({
         precipitation1hMm: Math.round(rain1h * 10) / 10,
         precipitation6hMm: Math.round(rain6h * 10) / 10,
@@ -152,8 +194,12 @@ async function obtenerSENAMHI(): Promise<WeatherStation[] | null> {
     const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
     const observations = await consultarSENAMHI(start, end);
     const covered = new Set(observations.map(o => o.station.id)).size;
+    const verifiedCount = SENAMHI_STATIONS.filter(station => station.verified).length;
 
-    if (!observations.length || covered < Math.ceil(PERU_STATIONS.length * 0.5)) return null;
+    // La fuente oficial solo se acepta si cubre al menos la mitad del catálogo
+    // SENAMHI verificado. Los demás puntos no se presentan como observaciones
+    // oficiales solo por estar geográficamente cerca.
+    if (!observations.length || covered < Math.ceil(verifiedCount * 0.5)) return null;
     return buildOfficialStations(observations);
   } catch {
     return null;
@@ -219,7 +265,7 @@ export async function obtenerEstaciones() {
     generatedAt: new Date().toISOString(),
     note:
       data.source === 'SENAMHI WIS2'
-        ? 'Observaciones horarias consultadas desde SENAMHI WIS2 y agregadas a ventanas de 1 h, 6 h y 24 h. La coincidencia con GÓTITA se realiza por proximidad geográfica y se exige cobertura mínima del 50% de las estaciones configuradas.'
+        ? 'Observaciones horarias consultadas desde SENAMHI WIS2 y asignadas únicamente a estaciones SENAMHI verificadas mediante identificador oficial o coincidencia con las coordenadas registradas de la estación verificada.'
         : 'No se pudo consultar SENAMHI WIS2 con cobertura suficiente; se utiliza Open-Meteo únicamente como respaldo de prototipo.',
   };
 }
