@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { PERU_STATIONS, WeatherStation } from './stations';
+import type { WeatherStation } from './stations';
 
 // Render hosts only the frontend. The backend remains on AWS API Gateway.
 export const API_URL = (import.meta.env.VITE_API_URL ?? 'https://1v9e21ic97.execute-api.us-east-1.amazonaws.com/api').replace(/\/$/, '');
@@ -12,19 +12,26 @@ async function fetchLiveStations(): Promise<WeatherStation[]> {
   const res = await fetch(`${API_URL}/weather/stations`);
   if (!res.ok) throw new Error(`API meteorológica respondió ${res.status}`);
   const data = await res.json() as StationsResponse;
-  // Keep the backend's verified subset; missing observations must not be
-  // replaced by the hard-coded sample stations.
   return Array.isArray(data.stations) ? data.stations : [];
 }
 
 export function useLiveStations() {
-  const [stations, setStations] = useState<WeatherStation[]>(PERU_STATIONS);
+  const [stations, setStations] = useState<WeatherStation[]>([]);
   const [status, setStatus] = useState<LiveStatus>('cargando');
   const reload = useCallback(async () => {
-    try { setStations(await fetchLiveStations()); setStatus('en-vivo'); }
-    catch { setStatus(prev => prev === 'en-vivo' ? prev : 'sin-conexion'); }
+    try {
+      setStations(await fetchLiveStations());
+      setStatus('en-vivo');
+    } catch {
+      setStations([]);
+      setStatus('sin-conexion');
+    }
   }, []);
-  useEffect(() => { void reload(); const timer = setInterval(() => void reload(), REFRESH_MS); return () => clearInterval(timer); }, [reload]);
+  useEffect(() => {
+    void reload();
+    const timer = setInterval(() => void reload(), REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [reload]);
   return { stations, status, reload };
 }
 
@@ -43,6 +50,10 @@ export function useRainOutlook() {
       setOutlook(data.outlook); setStatus('listo');
     } catch { setStatus(prev => prev === 'listo' ? prev : 'error'); }
   }, []);
-  useEffect(() => { void load(); const timer = setInterval(() => void load(), REFRESH_MS); return () => clearInterval(timer); }, [load]);
+  useEffect(() => {
+    void load();
+    const timer = setInterval(() => void load(), REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [load]);
   return { outlook, status, reload: load };
 }
