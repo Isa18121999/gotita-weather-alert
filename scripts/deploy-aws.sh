@@ -12,31 +12,25 @@ if ! aws sts get-caller-identity --region "$AWS_REGION" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> Instalando dependencias y compilando frontend"
+echo "==> Instalando dependencias necesarias para las Lambdas"
 npm install
-npm run build
 
-echo "==> Construyendo Lambdas con AWS SAM"
+echo "==> Construyendo funciones Lambda con AWS SAM"
 sam build --template-file template.yaml
 
-echo "==> Desplegando infraestructura AWS Academy"
+echo "==> Desplegando backend AWS (API Gateway + Lambda)"
 sam deploy \
   --template-file .aws-sam/build/template.yaml \
   --stack-name "$STACK_NAME" \
   --region "$AWS_REGION" \
   --capabilities CAPABILITY_IAM \
+  --resolve-s3 \
   --no-confirm-changeset \
   --no-fail-on-empty-changeset
 
-BUCKET=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$AWS_REGION" --query "Stacks[0].Outputs[?OutputKey=='WebBucketName'].OutputValue" --output text)
-WEBSITE=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$AWS_REGION" --query "Stacks[0].Outputs[?OutputKey=='WebsiteUrl'].OutputValue" --output text)
 API=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$AWS_REGION" --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
 
-echo "==> Publicando frontend en S3 privado: $BUCKET"
-aws s3 sync dist/ "s3://$BUCKET" --delete --region "$AWS_REGION"
-
 echo ""
-echo "GÓTITA desplegado en AWS Academy."
-echo "Web: $WEBSITE"
+echo "Backend GÓTITA desplegado en AWS."
 echo "API: $API"
-echo "S3: $BUCKET (privado)"
+echo "El frontend se publica exclusivamente en Render desde GitHub."
