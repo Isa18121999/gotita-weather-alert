@@ -23,7 +23,7 @@ export const riskFor = (mm:number):RiskLevel => mm > UMBRAL_ROJO_MM ? 'ALTO' : m
 export const RISK_COLOR:Record<RiskLevel,string> = { ALTO:'#EF4444', MEDIO:'#F59E0B', BAJO:'#22C55E' };
 const station = (id:string,name:string,department:string,province:string,region:NaturalRegion,lat:number,lng:number,basin:string):WeatherStation => {
   const official = SENAMHI_BY_GOTITA_ID.get(id);
-  return { id,name,department,province,region,lat,lng,precipitationMm:0,riskLevel:'BAJO',updatedMinutesAgo:null,basin,thresholdRedMm:UMBRAL_ROJO_MM,senamhiCode:official?.code ?? null,senamhiName:official?.name,senamhiVerified:official?.verified ?? false,senamhiType:official?.type,dataStatus:'sin-datos',riskObservation:'sin-datos',dataStatus:'sin-datos',riskObservation:'sin-datos' };
+  return { id,name,department,province,region,lat,lng,precipitationMm:0,riskLevel:'BAJO',updatedMinutesAgo:null,basin,thresholdRedMm:UMBRAL_ROJO_MM,senamhiCode:official?.code ?? null,senamhiName:official?.name,senamhiVerified:official?.verified ?? false,senamhiType:official?.type,dataStatus:'sin-datos',riskObservation:'sin-datos',dataStatus:'sin-datos',riskObservation:'sin-datos',dataStatus:'sin-datos',riskObservation:'sin-datos' };
 };
 export const PERU_STATIONS:WeatherStation[] = [
  station('est-piura-tambogrande','Estación Hidrometeorológica Tambogrande','Piura','Piura / Sullana','Costa',-4.928,-80.343,'Cuenca Hidrográfica del Río Piura'),
