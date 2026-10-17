@@ -118,6 +118,28 @@ Resources:
         Sourcemap: true
         OutExtension: ['.js=.mjs']
 
+  NoticiasFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: api/noticias.handler
+      Events:
+        News:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GotitaApi
+            Path: /api/noticias
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [api/noticias.ts]
+        Format: esm
+        Target: es2022
+        Minify: true
+        Sourcemap: true
+        OutExtension: ['.js=.mjs']
+
   WebFunction:
     Type: AWS::Serverless::Function
     Properties:
