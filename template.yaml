@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: '2010-09-10'
 Transform: AWS::Serverless-2016-10-31
 Description: GÓTITA - plataforma de alerta temprana de lluvias en Peru. Arquitectura compatible con AWS Academy Learner Lab usando S3 privado + API Gateway + Lambda.
 
@@ -14,6 +14,7 @@ Globals:
       Variables:
         NODE_OPTIONS: --enable-source-maps
 
+Resources:
   GotitaApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -142,6 +143,7 @@ Globals:
       BuildMethod: esbuild
       BuildProperties:
         EntryPoints: [api/web.ts]
+        External: ['@aws-sdk/client-s3']
         Format: esm
         Target: es2022
         Minify: true
