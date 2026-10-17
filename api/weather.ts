@@ -4,7 +4,7 @@ import { SENAMHI_STATIONS } from '../src/data/senamhiStations.ts';
 const CACHE_MS = 10 * 60 * 1000;
 const SENAMHI_COLLECTION = 'https://wis.senamhi.gob.pe/oapi/collections/urn%3Awmo%3Amd%3Ape-senamhi%3Asynop-hourly/items';
 const queryCoords = () => `latitude=${PERU_STATIONS.map(s => s.lat).join(',')}&longitude=${PERU_STATIONS.map(s => s.lng).join(',')}`;
-let cache: { at: number; stations: WeatherStation[]; source: string } | null = null;
+let cache: { at: number; stations: WeatherStation[]; source: string; note: string } | null = null;
 
 type Observation = {
   station: WeatherStation;
@@ -15,6 +15,7 @@ type Observation = {
 };
 
 function numeric(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
   const n = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -25,18 +26,13 @@ function normalize(value: unknown): string {
 
 function getStationIdentifier(props: any): string | null {
   const candidates = [
-    props?.station,
-    props?.station_id,
-    props?.stationId,
-    props?.station_code,
-    props?.stationCode,
-    props?.codigo_estacion,
-    props?.codigoEstacion,
     props?.wigos_station_identifier,
     props?.wigosStationIdentifier,
+    props?.wigos_id,
+    props?.wigosId,
   ];
   const found = candidates.find(value => value !== null && value !== undefined && String(value).trim() !== '');
-  return found === undefined ? null : String(found);
+  return found === undefined ? null : String(found).trim();
 }
 
 function getTime(props: any): number | null {
@@ -59,41 +55,22 @@ function getWindKmh(props: any): number | null {
   return numeric(props?.windKmh ?? props?.wind_kmh);
 }
 
+/**
+ * Only an exact, explicitly configured WIGOS identifier can link an observation
+ * to a GÓTITA station. We intentionally do not fuzzy-match short station codes
+ * or assign the nearest station from coordinates.
+ */
 function findVerifiedStation(feature: any): WeatherStation | null {
-  const props = feature?.properties ?? {};
-  const coords = feature?.geometry?.coordinates;
-  if (!Array.isArray(coords) || coords.length < 2) return null;
+  const identifier = normalize(getStationIdentifier(feature?.properties ?? {}));
+  if (!identifier) return null;
 
-  const lng = numeric(coords[0]);
-  const lat = numeric(coords[1]);
-  if (lat === null || lng === null) return null;
+  const match = SENAMHI_STATIONS.find(station =>
+    station.verified &&
+    station.wigosId !== null &&
+    normalize(station.wigosId) === identifier
+  );
 
-  const identifier = normalize(getStationIdentifier(props));
-
-  // Primero intentamos identificar la estación por un identificador oficial.
-  if (identifier) {
-    const byCode = SENAMHI_STATIONS.find(station =>
-      station.verified && station.code && (
-        identifier === normalize(station.code) ||
-        identifier.endsWith(normalize(station.code)) ||
-        normalize(station.code).endsWith(identifier)
-      )
-    );
-    if (byCode) return PERU_STATIONS.find(s => s.id === byCode.gotitaId) ?? null;
-  }
-
-  // Para estaciones verificadas cuyo código WIS2 aún no está documentado,
-  // usamos únicamente la coordenada de ESA estación; no comparamos contra
-  // todas las estaciones GÓTITA ni elegimos la "más cercana".
-  const verified = SENAMHI_STATIONS.filter(station => station.verified);
-  const coordinateMatch = verified.find(station => {
-    const distance = Math.hypot(station.lat - lat, station.lng - lng);
-    return distance <= 0.02;
-  });
-
-  return coordinateMatch
-    ? PERU_STATIONS.find(s => s.id === coordinateMatch.gotitaId) ?? null
-    : null;
+  return match ? PERU_STATIONS.find(station => station.id === match.gotitaId) ?? null : null;
 }
 
 async function consultarSENAMHI(start: Date, end: Date): Promise<Observation[]> {
@@ -105,7 +82,7 @@ async function consultarSENAMHI(start: Date, end: Date): Promise<Observation[]> 
   });
 
   const response = await fetch(`${SENAMHI_COLLECTION}?${params.toString()}`, {
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(15000),
     headers: { Accept: 'application/geo+json, application/json' },
   });
 
@@ -146,45 +123,50 @@ function buildOfficialStations(observations: Observation[]): WeatherStation[] {
 
   const now = Date.now();
 
-  return PERU_STATIONS.map(station => {
+  // Return only stations with an explicitly matched official observation.
+  // Missing observations are not emitted as 0 mm or "BAJO".
+  return PERU_STATIONS.flatMap(station => {
     const rows = (byStation.get(station.id) ?? []).sort((a, b) => a.time - b.time);
-    const latest = rows.at(-1);
+    if (rows.length === 0) return [];
+
+    const latest = rows.at(-1)!;
     const rainRows = rows.filter(r => r.precipitation !== null);
-    const rain1h = rainRows
-      .filter(r => r.time >= now - 60 * 60 * 1000)
-      .reduce((sum, r) => sum + (r.precipitation ?? 0), 0);
-    const rain6h = rainRows
-      .filter(r => r.time >= now - 6 * 60 * 60 * 1000)
-      .reduce((sum, r) => sum + (r.precipitation ?? 0), 0);
-    const rain24h = rainRows
-      .filter(r => r.time >= now - 24 * 60 * 60 * 1000)
+    const within = (hours: number) => rainRows
+      .filter(r => r.time >= now - hours * 60 * 60 * 1000)
       .reduce((sum, r) => sum + (r.precipitation ?? 0), 0);
 
-    const observed24h = Math.round(rain24h * 10) / 10;
-    const latestRain = latest?.precipitation ?? 0;
-    const riskRain = observed24h > 0 ? observed24h : latestRain;
-    const senamhi = SENAMHI_STATIONS.find(item => item.gotitaId === station.id && item.verified);
+    const hasRainObservation = rainRows.length > 0;
+    const observed24h = hasRainObservation ? Math.round(within(24) * 10) / 10 : null;
+    const latestRain = latest.precipitation;
+    const riskRain = observed24h ?? latestRain;
+    const stationWithObservedRisk = riskRain === null ? null : riskFor(riskRain);
+    const senamhi = SENAMHI_STATIONS.find(item =>
+      item.gotitaId === station.id && item.verified && item.wigosId
+    );
 
-    return {
+    return [{
       ...station,
-      precipitationMm: observed24h,
-      riskLevel: riskFor(riskRain),
+      // Extend fields at runtime while keeping compatibility with the existing model.
+      precipitationMm: observed24h ?? station.precipitationMm,
+      ...(stationWithObservedRisk ? { riskLevel: stationWithObservedRisk } : {}),
       thresholdRedMm: UMBRAL_ROJO_MM,
-      updatedMinutesAgo: latest ? Math.max(0, Math.round((now - latest.time) / 60000)) : 0,
+      updatedMinutesAgo: Math.max(0, Math.round((now - latest.time) / 60000)),
       current: {
-        temperatureC: latest?.temperature ?? null,
+        temperatureC: latest.temperature,
         precipitationMm: latestRain,
         rainMm: latestRain,
-        windKmh: latest?.windKmh ?? null,
-        time: latest ? new Date(latest.time).toISOString() : null,
+        windKmh: latest.windKmh,
+        time: new Date(latest.time).toISOString(),
       },
-      source: senamhi ? 'SENAMHI WIS2' : 'SENAMHI WIS2 · estación no verificada',
+      source: senamhi ? 'SENAMHI WIS2' : 'SENAMHI WIS2 · mapeo pendiente',
       ...({
-        precipitation1hMm: Math.round(rain1h * 10) / 10,
-        precipitation6hMm: Math.round(rain6h * 10) / 10,
+        precipitation1hMm: rainRows.length ? Math.round(within(1) * 10) / 10 : null,
+        precipitation6hMm: rainRows.length ? Math.round(within(6) * 10) / 10 : null,
         precipitation24hMm: observed24h,
+        dataStatus: 'observado',
+        wigosId: senamhi?.wigosId ?? null,
       } as any),
-    } as WeatherStation;
+    } as WeatherStation];
   });
 }
 
@@ -193,14 +175,10 @@ async function obtenerSENAMHI(): Promise<WeatherStation[] | null> {
     const end = new Date();
     const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
     const observations = await consultarSENAMHI(start, end);
-    const covered = new Set(observations.map(o => o.station.id)).size;
-    const verifiedCount = SENAMHI_STATIONS.filter(station => station.verified).length;
+    if (!observations.length) return null;
 
-    // La fuente oficial solo se acepta si cubre al menos la mitad del catálogo
-    // SENAMHI verificado. Los demás puntos no se presentan como observaciones
-    // oficiales solo por estar geográficamente cerca.
-    if (!observations.length || covered < Math.ceil(verifiedCount * 0.5)) return null;
-    return buildOfficialStations(observations);
+    const official = buildOfficialStations(observations);
+    return official.length ? official : null;
   } catch {
     return null;
   }
@@ -217,27 +195,33 @@ async function obtenerOpenMeteo(): Promise<WeatherStation[]> {
   return PERU_STATIONS.map((station, i) => {
     const row = rows[i];
     const hourly = Array.isArray(row?.hourly?.precipitation) ? row.hourly.precipitation : [];
-    const rain24 = hourly.reduce((sum: number, v: number | null) => sum + (v ?? 0), 0);
-    const currentTime = row?.current?.time ? new Date(row.current.time).getTime() : Date.now();
+    const hasHourlyData = hourly.some((value: unknown) => numeric(value) !== null);
+    const rain24 = hasHourlyData
+      ? hourly.reduce((sum: number, value: number | null) => sum + (numeric(value) ?? 0), 0)
+      : null;
+    const currentTime = row?.current?.time ? new Date(row.current.time).getTime() : null;
+    const currentRain = numeric(row?.current?.precipitation);
 
     return {
       ...station,
-      precipitationMm: Math.round(rain24 * 10) / 10,
-      riskLevel: riskFor(rain24),
+      precipitationMm: rain24 ?? station.precipitationMm,
+      ...(rain24 === null ? {} : { riskLevel: riskFor(rain24) }),
       thresholdRedMm: UMBRAL_ROJO_MM,
-      updatedMinutesAgo: Math.max(0, Math.round((Date.now() - currentTime) / 60000)),
+      updatedMinutesAgo: currentTime === null ? null as any : Math.max(0, Math.round((Date.now() - currentTime) / 60000)),
       current: {
-        temperatureC: row?.current?.temperature_2m ?? null,
-        precipitationMm: row?.current?.precipitation ?? null,
-        rainMm: row?.current?.rain ?? null,
-        windKmh: row?.current?.wind_speed_10m ?? null,
+        temperatureC: numeric(row?.current?.temperature_2m),
+        precipitationMm: currentRain,
+        rainMm: numeric(row?.current?.rain),
+        windKmh: numeric(row?.current?.wind_speed_10m),
         time: row?.current?.time ?? null,
       },
       source: 'Open-Meteo (respaldo)',
       ...({
-        precipitation1hMm: row?.current?.precipitation ?? 0,
+        precipitation1hMm: currentRain,
         precipitation6hMm: null,
-        precipitation24hMm: Math.round(rain24 * 10) / 10,
+        precipitation24hMm: rain24 === null ? null : Math.round(rain24 * 10) / 10,
+        dataStatus: rain24 === null ? 'sin-datos' : 'respaldo',
+        wigosId: null,
       } as any),
     } as WeatherStation;
   });
@@ -248,12 +232,22 @@ async function obtenerLluvias() {
 
   const official = await obtenerSENAMHI();
   if (official) {
-    cache = { at: Date.now(), stations: official, source: 'SENAMHI WIS2' };
+    cache = {
+      at: Date.now(),
+      stations: official,
+      source: 'SENAMHI WIS2',
+      note: 'Solo se muestran observaciones con un WIGOS ID exacto y una correspondencia explícitamente verificada. Las estaciones sin observación no se devuelven como cero.',
+    };
     return cache;
   }
 
   const fallback = await obtenerOpenMeteo();
-  cache = { at: Date.now(), stations: fallback, source: 'Open-Meteo (respaldo)' };
+  cache = {
+    at: Date.now(),
+    stations: fallback,
+    source: 'Open-Meteo (respaldo)',
+    note: 'SENAMHI WIS2 no proporcionó observaciones mapeadas de forma inequívoca. Estos valores provienen de Open-Meteo y no son observaciones de SENAMHI.',
+  };
   return cache;
 }
 
@@ -263,10 +257,7 @@ export async function obtenerEstaciones() {
     stations: data.stations,
     source: data.source,
     generatedAt: new Date().toISOString(),
-    note:
-      data.source === 'SENAMHI WIS2'
-        ? 'Observaciones horarias consultadas desde SENAMHI WIS2 y asignadas únicamente a estaciones SENAMHI verificadas mediante identificador oficial o coincidencia con las coordenadas registradas de la estación verificada.'
-        : 'No se pudo consultar SENAMHI WIS2 con cobertura suficiente; se utiliza Open-Meteo únicamente como respaldo de prototipo.',
+    note: data.note,
   };
 }
 
@@ -277,12 +268,12 @@ export async function obtenerPronostico() {
 
   const raw = await res.json();
   const rows = Array.isArray(raw) ? raw : [raw];
-  const result: Record<string, { past: { date: string; mm: number }[]; forecast: { date: string; mm: number }[] }> = {};
+  const result: Record<string, { past: { date: string; mm: number | null }[]; forecast: { date: string; mm: number | null }[] }> = {};
 
   PERU_STATIONS.forEach((station, i) => {
     const times: string[] = rows[i]?.daily?.time ?? [];
     const values: (number | null)[] = rows[i]?.daily?.precipitation_sum ?? [];
-    const days = times.map((date, d) => ({ date, mm: values[d] ?? 0 }));
+    const days = times.map((date, d) => ({ date, mm: values[d] ?? null }));
     result[station.id] = { past: days.slice(0, 30), forecast: days.slice(30) };
   });
 
