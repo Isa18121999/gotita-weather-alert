@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-10'
+AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: GÓTITA - plataforma de alerta temprana de lluvias en Peru. Arquitectura compatible con AWS Academy Learner Lab usando S3 privado + API Gateway + Lambda.
 
