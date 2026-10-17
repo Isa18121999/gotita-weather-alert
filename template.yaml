@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: GÓTITA - plataforma de alerta temprana de lluvias en Peru. Arquitectura compatible con AWS Academy Learner Lab usando S3 privado + API Gateway + Lambda.
+Description: GÓTITA backend (API Gateway + Lambda) para frontend alojado en Render.
 
 Globals:
   Function:
@@ -140,60 +140,7 @@ Resources:
         Sourcemap: true
         OutExtension: ['.js=.mjs']
 
-  WebFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: .
-      Handler: api/web.handler
-      Environment:
-        Variables:
-          WEB_BUCKET: !Ref WebBucket
-      Events:
-        Root:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref GotitaApi
-            Path: /
-            Method: GET
-        Static:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref GotitaApi
-            Path: '/{proxy+}'
-            Method: GET
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        EntryPoints: [api/web.ts]
-        External: ['@aws-sdk/client-s3']
-        Format: esm
-        Target: es2022
-        Minify: true
-        Sourcemap: true
-        OutExtension: ['.js=.mjs']
-
-  WebBucket:
-    Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-
 Outputs:
-  WebsiteUrl:
-    Description: URL publica de GÓTITA mediante API Gateway + Lambda
-    Value: !Sub 'https://${GotitaApi}.execute-api.${AWS::Region}.amazonaws.com/'
-  WebBucketName:
-    Description: Bucket S3 privado donde se almacenan los archivos del frontend
-    Value: !Ref WebBucket
   ApiUrl:
-    Description: Endpoint HTTP API de GÓTITA
+    Description: Endpoint HTTP API para el frontend alojado en Render
     Value: !Sub 'https://${GotitaApi}.execute-api.${AWS::Region}.amazonaws.com'
