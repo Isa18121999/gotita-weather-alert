@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PERU_STATIONS } from './data/stations';
 import { useLiveStations } from './data/weather';
 import { Navbar, NavPage, Footer } from './components/Layout';
 import { AlertasPage } from './pages/Alertas';
@@ -9,8 +10,8 @@ import { NoticiasPage } from './pages/Noticias';
 export function App() {
   const [activePage, setActivePage] = useState<NavPage>('inicio');
   const { stations, status: dataStatus, reload: reloadStations } = useLiveStations();
-  const [selectedStationId, setSelectedStationId] = useState<string>('');
-  const selectedStation = stations.find(station => station.id === selectedStationId) ?? stations[0];
+  const [selectedStationId, setSelectedStationId] = useState(PERU_STATIONS[0].id);
+  const selectedStation = stations.find((s) => s.id === selectedStationId) ?? stations[0];
 
   const handleNavigate = (page: NavPage) => {
     setActivePage(page);
@@ -21,12 +22,9 @@ export function App() {
     <div className="min-h-screen bg-white text-[#111827] flex flex-col">
       <Navbar activePage={activePage} onNavigate={handleNavigate} />
       <main className={`flex-1 bg-white ${activePage === 'inicio' ? '' : 'pt-24'}`}>
-        {dataStatus === 'cargando' && <div className="max-w-6xl mx-auto px-5 py-10 text-slate-600" role="status">Consultando estaciones y fuente meteorológica…</div>}
-        {dataStatus === 'sin-conexion' && <div className="max-w-6xl mx-auto px-5 py-10"><div className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-amber-900"><b>No hay conexión con la API meteorológica.</b><p className="text-sm mt-1">No se mostrarán las estaciones de ejemplo como si fueran observaciones en vivo.</p><button className="mt-3 rounded-lg border px-4 py-2 bg-white" onClick={reloadStations}>Reintentar</button></div></div>}
-        {dataStatus === 'en-vivo' && stations.length === 0 && <div className="max-w-6xl mx-auto px-5 py-10 text-slate-600">La API respondió, pero no hay observaciones de estaciones disponibles. Consulta las fuentes oficiales.</div>}
-        {dataStatus === 'en-vivo' && selectedStation && activePage === 'inicio' && <InicioPage dataStatus={dataStatus} onRetry={reloadStations} stations={stations} selectedStation={selectedStation} onSelectStation={station => setSelectedStationId(station.id)} onNavigate={handleNavigate} />}
-        {dataStatus === 'en-vivo' && selectedStation && activePage === 'mapa' && <MapaPage dataStatus={dataStatus} stations={stations} selectedStation={selectedStation} onSelectStation={station => setSelectedStationId(station.id)} />}
-        {dataStatus === 'en-vivo' && activePage === 'alertas' && <AlertasPage stations={stations} dataStatus={dataStatus} onRefreshStations={reloadStations} onViewStationOnMap={station => { setSelectedStationId(station.id); handleNavigate('mapa'); }} />}
+        {activePage === 'inicio' && <InicioPage dataStatus={dataStatus} onRetry={reloadStations} stations={stations} selectedStation={selectedStation} onSelectStation={(st) => setSelectedStationId(st.id)} onNavigate={handleNavigate} />}
+        {activePage === 'mapa' && <MapaPage dataStatus={dataStatus} stations={stations} selectedStation={selectedStation} onSelectStation={(st) => setSelectedStationId(st.id)} />}
+        {activePage === 'alertas' && <AlertasPage stations={stations} dataStatus={dataStatus} onRefreshStations={reloadStations} onViewStationOnMap={(st) => { setSelectedStationId(st.id); handleNavigate('mapa'); }} />}
         {activePage === 'noticias' && <NoticiasPage />}
       </main>
       <Footer onNavigate={handleNavigate} />
