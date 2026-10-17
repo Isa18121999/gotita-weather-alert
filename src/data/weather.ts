@@ -6,13 +6,15 @@ export const API_URL = (import.meta.env.VITE_API_URL ?? 'https://1v9e21ic97.exec
 export type LiveStatus = 'cargando' | 'en-vivo' | 'sin-conexion';
 const REFRESH_MS = 15 * 60 * 1000;
 
-interface StationsResponse { stations: WeatherStation[]; source: string; generatedAt: string; }
+interface StationsResponse { stations: WeatherStation[]; source: string; generatedAt: string; note?: string; }
 
 async function fetchLiveStations(): Promise<WeatherStation[]> {
   const res = await fetch(`${API_URL}/weather/stations`);
   if (!res.ok) throw new Error(`API meteorológica respondió ${res.status}`);
   const data = await res.json() as StationsResponse;
-  return data.stations;
+  // Keep the backend's verified subset; missing observations must not be
+  // replaced by the hard-coded sample stations.
+  return Array.isArray(data.stations) ? data.stations : [];
 }
 
 export function useLiveStations() {
@@ -26,7 +28,7 @@ export function useLiveStations() {
   return { stations, status, reload };
 }
 
-export interface DayRain { date: string; mm: number }
+export interface DayRain { date: string; mm: number | null }
 export interface StationOutlook { past: DayRain[]; forecast: DayRain[] }
 export type OutlookStatus = 'cargando' | 'listo' | 'error';
 
