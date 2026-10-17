@@ -3,16 +3,27 @@ import { SENAMHI_BY_GOTITA_ID } from './senamhiStations';
 
 export type RiskLevel = 'ALTO' | 'MEDIO' | 'BAJO';
 export type NaturalRegion = 'Costa' | 'Sierra' | 'Selva';
-export interface WeatherStation { id:string; name:string; department:string; province:string; region:NaturalRegion; lat:number; lng:number; precipitationMm:number; riskLevel:RiskLevel; updatedMinutesAgo:number; basin:string; thresholdRedMm:number; senamhiCode?:string|null; senamhiName?:string; senamhiVerified?:boolean; senamhiType?:'meteorologica'|'hidrologica'; current?:{temperatureC:number|null; precipitationMm:number|null; rainMm:number|null; windKmh:number|null; time:string|null}; source?:string; }
+export interface WeatherStation {
+  id: string; name: string; department: string; province: string; region: NaturalRegion;
+  lat: number; lng: number; precipitationMm: number; riskLevel: RiskLevel;
+  updatedMinutesAgo: number | null; basin: string; thresholdRedMm: number;
+  senamhiCode?: string | null; senamhiName?: string; senamhiVerified?: boolean;
+  senamhiType?: 'meteorologica' | 'hidrologica';
+  current?: { temperatureC: number | null; precipitationMm: number | null; rainMm: number | null; windKmh: number | null; time: string | null };
+  source?: string;
+}
 export interface ActiveAlert { id:string; code:string; title:string; department:string; provinces:string[]; region:NaturalRegion; severity:'ROJA'|'NARANJA'; riskLevel:RiskLevel; issuedAt:string; validUntil:string; expectedRainfall:string; riverBasin:string; description:string; protocolSteps:string[]; evacuationCenters:number; }
 export interface HistoricalAlert { id:string; date:string; region:string; naturalRegion:NaturalRegion; alertType:string; riskLevel:RiskLevel; recordedMm:string; station:string; }
 export interface NewsItem { id:string; title:string; date:string; source:string; summary:string; fullText:string[]; imageUrl:string; regionTag:string; url?:string; }
-export const UMBRAL_NARANJA_MM=15;
-export const UMBRAL_ROJO_MM=35;
-export const riskFor=(mm:number):RiskLevel=>mm>UMBRAL_ROJO_MM?'ALTO':mm>=UMBRAL_NARANJA_MM?'MEDIO':'BAJO';
-export const RISK_COLOR:Record<RiskLevel,string>={ALTO:'#EF4444',MEDIO:'#F59E0B',BAJO:'#22C55E'};
-const station=(id:string,name:string,department:string,province:string,region:NaturalRegion,lat:number,lng:number,basin:string):WeatherStation=>{const official=SENAMHI_BY_GOTITA_ID.get(id);return{id,name,department,province,region,lat,lng,precipitationMm:0,riskLevel:'BAJO',updatedMinutesAgo:0,basin,thresholdRedMm:35,senamhiCode:official?.code??null,senamhiName:official?.name,senamhiVerified:official?.verified??false,senamhiType:official?.type};};
-export const PERU_STATIONS:WeatherStation[]=[
+export const UMBRAL_NARANJA_MM = 15;
+export const UMBRAL_ROJO_MM = 35;
+export const riskFor = (mm:number):RiskLevel => mm > UMBRAL_ROJO_MM ? 'ALTO' : mm >= UMBRAL_NARANJA_MM ? 'MEDIO' : 'BAJO';
+export const RISK_COLOR:Record<RiskLevel,string> = { ALTO:'#EF4444', MEDIO:'#F59E0B', BAJO:'#22C55E' };
+const station = (id:string,name:string,department:string,province:string,region:NaturalRegion,lat:number,lng:number,basin:string):WeatherStation => {
+  const official = SENAMHI_BY_GOTITA_ID.get(id);
+  return { id,name,department,province,region,lat,lng,precipitationMm:0,riskLevel:'BAJO',updatedMinutesAgo:null,basin,thresholdRedMm:UMBRAL_ROJO_MM,senamhiCode:official?.code ?? null,senamhiName:official?.name,senamhiVerified:official?.verified ?? false,senamhiType:official?.type };
+};
+export const PERU_STATIONS:WeatherStation[] = [
  station('est-piura-tambogrande','Estación Hidrometeorológica Tambogrande','Piura','Piura / Sullana','Costa',-4.928,-80.343,'Cuenca Hidrográfica del Río Piura'),
  station('est-tumbes-tigre','Estación Hidrológica Cabo Inga - El Tigre','Tumbes','Tumbes / Zarumilla','Costa',-3.758,-80.456,'Cuenca Binacional Puyango-Tumbes'),
  station('est-lambayeque-tinajones','Estación Bocatoma Raca Rumi - Chancay','Lambayeque','Chiclayo / Ferreñafe','Costa',-6.641,-79.418,'Cuenca Chancay-Lambayeque y Río La Leche'),
@@ -39,5 +50,5 @@ export const PERU_STATIONS:WeatherStation[]=[
  station('pto-pasco','Punto de monitoreo Cerro de Pasco','Pasco','Pasco','Sierra',-10.6864,-76.2625,'Cuenca Alta del Río Huallaga'),
  station('pto-tacna','Punto de monitoreo Tacna','Tacna','Tacna','Costa',-18.0066,-70.2463,'Cuenca del Río Caplina')
 ];
-export const EMERGENCY_SITES={'115':'https://www.gob.pe/indeci','116':'https://portal.bomberosperu.gob.pe/','105':'https://www.gob.pe/pnp','106':'https://www.gob.pe/samu'} as const;
-export const openOfficialSiteOnDesktop=(e:React.MouseEvent<HTMLAnchorElement>,href:string)=>{if(window.matchMedia('(pointer: coarse)').matches)return;e.preventDefault();window.open(href,'_blank','noopener,noreferrer');};
+export const EMERGENCY_SITES = {'115':'https://www.gob.pe/indeci','116':'https://portal.bomberosperu.gob.pe/','105':'https://www.gob.pe/pnp','106':'https://www.gob.pe/samu'} as const;
+export const openOfficialSiteOnDesktop = (e:React.MouseEvent<HTMLAnchorElement>,href:string) => { if(window.matchMedia('(pointer: coarse)').matches)return; e.preventDefault(); window.open(href,'_blank','noopener,noreferrer'); };
