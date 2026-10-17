@@ -1,8 +1,9 @@
 import type React from 'react';
+import { SENAMHI_BY_GOTITA_ID } from './senamhiStations';
 
 export type RiskLevel = 'ALTO' | 'MEDIO' | 'BAJO';
 export type NaturalRegion = 'Costa' | 'Sierra' | 'Selva';
-export interface WeatherStation { id:string; name:string; department:string; province:string; region:NaturalRegion; lat:number; lng:number; precipitationMm:number; riskLevel:RiskLevel; updatedMinutesAgo:number; basin:string; thresholdRedMm:number; current?:{temperatureC:number|null; precipitationMm:number|null; rainMm:number|null; windKmh:number|null; time:string|null}; source?:string; }
+export interface WeatherStation { id:string; name:string; department:string; province:string; region:NaturalRegion; lat:number; lng:number; precipitationMm:number; riskLevel:RiskLevel; updatedMinutesAgo:number; basin:string; thresholdRedMm:number; senamhiCode?:string|null; senamhiName?:string; senamhiVerified?:boolean; senamhiType?:'meteorologica'|'hidrologica'; current?:{temperatureC:number|null; precipitationMm:number|null; rainMm:number|null; windKmh:number|null; time:string|null}; source?:string; }
 export interface ActiveAlert { id:string; code:string; title:string; department:string; provinces:string[]; region:NaturalRegion; severity:'ROJA'|'NARANJA'; riskLevel:RiskLevel; issuedAt:string; validUntil:string; expectedRainfall:string; riverBasin:string; description:string; protocolSteps:string[]; evacuationCenters:number; }
 export interface HistoricalAlert { id:string; date:string; region:string; naturalRegion:NaturalRegion; alertType:string; riskLevel:RiskLevel; recordedMm:string; station:string; }
 export interface NewsItem { id:string; title:string; date:string; source:string; summary:string; fullText:string[]; imageUrl:string; regionTag:string; url?:string; }
@@ -10,7 +11,7 @@ export const UMBRAL_NARANJA_MM=15;
 export const UMBRAL_ROJO_MM=35;
 export const riskFor=(mm:number):RiskLevel=>mm>UMBRAL_ROJO_MM?'ALTO':mm>=UMBRAL_NARANJA_MM?'MEDIO':'BAJO';
 export const RISK_COLOR:Record<RiskLevel,string>={ALTO:'#EF4444',MEDIO:'#F59E0B',BAJO:'#22C55E'};
-const station=(id:string,name:string,department:string,province:string,region:NaturalRegion,lat:number,lng:number,basin:string):WeatherStation=>({id,name,department,province,region,lat,lng,precipitationMm:0,riskLevel:'BAJO',updatedMinutesAgo:0,basin,thresholdRedMm:35});
+const station=(id:string,name:string,department:string,province:string,region:NaturalRegion,lat:number,lng:number,basin:string):WeatherStation=>{const official=SENAMHI_BY_GOTITA_ID.get(id);return{id,name,department,province,region,lat,lng,precipitationMm:0,riskLevel:'BAJO',updatedMinutesAgo:0,basin,thresholdRedMm:35,senamhiCode:official?.code??null,senamhiName:official?.name,senamhiVerified:official?.verified??false,senamhiType:official?.type};};
 export const PERU_STATIONS:WeatherStation[]=[
  station('est-piura-tambogrande','Estación Hidrometeorológica Tambogrande','Piura','Piura / Sullana','Costa',-4.928,-80.343,'Cuenca Hidrográfica del Río Piura'),
  station('est-tumbes-tigre','Estación Hidrológica Cabo Inga - El Tigre','Tumbes','Tumbes / Zarumilla','Costa',-3.758,-80.456,'Cuenca Binacional Puyango-Tumbes'),
