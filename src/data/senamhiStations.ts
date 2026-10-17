@@ -2,6 +2,9 @@ export type SenamhiStationType = 'meteorologica' | 'hidrologica';
 export type SenamhiModality = 'convencional' | 'automatica';
 
 export interface SenamhiStation {
+  /** Exact official WIGOS station identifier from SENAMHI WIS2. */
+  wigosId: string | null;
+  /** Traditional SENAMHI station identifier, only when verified in the official catalogue. */
   code: string | null;
   name: string;
   type: SenamhiStationType;
@@ -16,14 +19,14 @@ export interface SenamhiStation {
 }
 
 /**
- * Catálogo de correspondencias GÓTITA ↔ SENAMHI.
- *
- * code = null cuando el código oficial aún no está respaldado por
- * la fuente consultada. verified evita presentar una coincidencia
- * geográfica como si fuera una estación oficial equivalente.
+ * GÓTITA ↔ SENAMHI crosswalk.
+ * Do not mark a mapping verified until its WIGOS identifier or exact official
+ * station coordinates have been checked against the SENAMHI WIS2 catalogue.
+ * Local short labels such as TMA/PIS are not presumed to be WIGOS identifiers.
  */
 export const SENAMHI_STATIONS: SenamhiStation[] = [
   {
+    wigosId: null,
     code: '111060',
     name: 'Chosica',
     type: 'hidrologica',
@@ -33,11 +36,12 @@ export const SENAMHI_STATIONS: SenamhiStation[] = [
     lat: -11.93,
     lng: -76.69,
     gotitaId: 'est-lima-chosica',
-    verified: true,
-    verificationNote: 'SENAMHI identifica Chosica con código 111060 y coordenadas -11.930, -76.690.',
+    verified: false,
+    verificationNote: 'Pendiente de contrastar el código tradicional con el catálogo WIS2.',
   },
   {
-    code: 'TMA',
+    wigosId: null,
+    code: null,
     name: 'Tingo María',
     type: 'hidrologica',
     modality: null,
@@ -45,11 +49,12 @@ export const SENAMHI_STATIONS: SenamhiStation[] = [
     lat: -9.29,
     lng: -76.003,
     gotitaId: 'est-huanuco-tingo',
-    verified: true,
-    verificationNote: 'Tingo María aparece en la documentación hidrológica de SENAMHI.',
+    verified: false,
+    verificationNote: 'Pendiente de confirmar WIGOS ID y coordenadas en el catálogo WIS2.',
   },
   {
-    code: 'PIS',
+    wigosId: null,
+    code: null,
     name: 'Pisac',
     type: 'hidrologica',
     modality: null,
@@ -57,10 +62,11 @@ export const SENAMHI_STATIONS: SenamhiStation[] = [
     lat: -13.4195,
     lng: -71.8509,
     gotitaId: 'est-cusco-pisac',
-    verified: true,
-    verificationNote: 'SENAMHI registra Pisac en su red de estaciones de Cusco.',
+    verified: false,
+    verificationNote: 'Pendiente de confirmar WIGOS ID y coordenadas en el catálogo WIS2.',
   },
   {
+    wigosId: null,
     code: null,
     name: 'Abancay',
     type: 'meteorologica',
@@ -69,10 +75,11 @@ export const SENAMHI_STATIONS: SenamhiStation[] = [
     lat: -13.6049,
     lng: -72.8568,
     gotitaId: 'pto-apurimac',
-    verified: true,
-    verificationNote: 'SENAMHI registra Abancay con estas coordenadas; el código oficial queda pendiente.',
+    verified: false,
+    verificationNote: 'Pendiente de confirmar WIGOS ID y coordenadas en el catálogo WIS2.',
   },
   {
+    wigosId: null,
     code: null,
     name: 'Puerto Maldonado',
     type: 'meteorologica',
@@ -81,8 +88,8 @@ export const SENAMHI_STATIONS: SenamhiStation[] = [
     lat: -12.5873,
     lng: -69.2089,
     gotitaId: 'pto-madrededios',
-    verified: true,
-    verificationNote: 'SENAMHI registra Puerto Maldonado con estas coordenadas; el código oficial queda pendiente.',
+    verified: false,
+    verificationNote: 'Pendiente de confirmar WIGOS ID y coordenadas en el catálogo WIS2.',
   },
 ];
 
