@@ -5,13 +5,19 @@ import { AlertasPage } from './pages/Alertas';
 import { InicioPage } from './pages/Inicio';
 import { MapaPage } from './pages/Mapa';
 import { NoticiasPage } from './pages/Noticias';
+import { CoverPage } from './pages/CoverPage';
 
 export function App() {
+  const [showCover, setShowCover] = useState(true);
   const [activePage, setActivePage] = useState<NavPage>('inicio');
   const { stations, status: dataStatus, reload: reloadStations } = useLiveStations();
   const [selectedStationId, setSelectedStationId] = useState('');
   const selectedStation = stations.find(station => station.id === selectedStationId) ?? stations[0];
   const handleNavigate = (page: NavPage) => { setActivePage(page); window.scrollTo({ top: 0 }); };
+
+  if (showCover) {
+    return <CoverPage onEnter={() => setShowCover(false)} />;
+  }
 
   return <div className="min-h-screen bg-white text-[#111827] flex flex-col">
     <Navbar activePage={activePage} onNavigate={handleNavigate} />
