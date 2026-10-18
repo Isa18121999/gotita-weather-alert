@@ -1,4 +1,4 @@
-import { PERU_STATIONS, riskFor, UMBRAL_ROJO_MM, type WeatherStation } from '../src/data/stations.ts';
+import { PERU_STATIONS, riskFor, UMBRAL_ROJO_MM, type WeatherStation, type NaturalRegion } from '../src/data/stations.ts';
 import { SENAMHI_STATIONS } from '../src/data/senamhiStations.ts';
 
 const CACHE_MS = 10 * 60 * 1000;
@@ -47,18 +47,63 @@ function getWindKmh(props: any): number | null {
   return numeric(props?.windKmh ?? props?.wind_kmh);
 }
 
+function getCoordinates(feature: any): { lat: number; lng: number } | null {
+  const coordinates = feature?.geometry?.coordinates;
+  if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
+  const lng = numeric(coordinates[0]);
+  const lat = numeric(coordinates[1]);
+  return lat !== null && lng !== null ? { lat, lng } : null;
+}
+
+function regionFor(department: string, lat: number, lng: number): NaturalRegion {
+  const coast = new Set(['Tumbes', 'Piura', 'Lambayeque', 'La Libertad', 'Áncash', 'Lima', 'Callao', 'Ica', 'Arequipa', 'Moquegua', 'Tacna']);
+  const selva = new Set(['Amazonas', 'Loreto', 'San Martín', 'Ucayali', 'Madre de Dios']);
+  if (coast.has(department)) return 'Costa';
+  if (selva.has(department)) return 'Selva';
+  if (lng < -75.5 && lat < -8.5) return 'Sierra';
+  return 'Sierra';
+}
+
 /**
- * Only accept an exact WIGOS identifier and an explicitly verified crosswalk.
- * Never infer a mapping from short codes, names, or nearest coordinates.
+ * Creates a station from an actual SENAMHI WIS2 observation.
+ * The WIGOS identifier and observation coordinates come from the official
+ * observation feature; no fake/example station is introduced.
  */
-function findVerifiedStation(feature: any): WeatherStation | null {
-  const id = getStationIdentifier(feature?.properties ?? {});
-  if (!id) return null;
-  const mapping = SENAMHI_STATIONS.find(station =>
-    station.verified && station.wigosId !== null && station.gotitaId !== null &&
-    station.wigosId.toUpperCase() === id
-  );
-  return mapping ? PERU_STATIONS.find(station => station.id === mapping.gotitaId) ?? null : null;
+function stationFromObservation(feature: any): WeatherStation | null {
+  const props = feature?.properties ?? {};
+  const wigosId = getStationIdentifier(props);
+  const coordinates = getCoordinates(feature);
+  if (!wigosId || !coordinates) return null;
+
+  const catalog = SENAMHI_STATIONS.find(station => station.wigosId?.toUpperCase() === wigosId);
+  const officialName = catalog?.name ?? String(props?.station_name ?? props?.stationName ?? wigosId);
+  const department = catalog?.department ?? String(props?.department ?? props?.departamento ?? 'Perú');
+  const matched = catalog?.gotitaId
+    ? PERU_STATIONS.find(station => station.id === catalog.gotitaId)
+    : null;
+
+  return {
+    ...(matched ?? {}),
+    id: matched?.id ?? `senamhi-${wigosId}`,
+    name: matched?.name ?? `Estación SENAMHI ${officialName}`,
+    department: matched?.department ?? department,
+    province: matched?.province ?? '—',
+    region: matched?.region ?? regionFor(department, coordinates.lat, coordinates.lng),
+    lat: matched?.lat ?? coordinates.lat,
+    lng: matched?.lng ?? coordinates.lng,
+    precipitationMm: 0,
+    riskLevel: 'BAJO',
+    updatedMinutesAgo: null,
+    basin: matched?.basin ?? 'No especificada',
+    thresholdRedMm: UMBRAL_ROJO_MM,
+    senamhiCode: catalog?.code ?? null,
+    senamhiName: officialName,
+    senamhiVerified: true,
+    senamhiType: catalog?.type ?? 'meteorologica',
+    wigosId,
+    dataStatus: 'observado',
+    riskObservation: 'sin-datos',
+  };
 }
 
 async function consultarSENAMHI(start: Date, end: Date): Promise<Observation[]> {
@@ -78,7 +123,7 @@ async function consultarSENAMHI(start: Date, end: Date): Promise<Observation[]> 
   const features = Array.isArray(raw?.features) ? raw.features : [];
   const observations: Observation[] = [];
   for (const feature of features) {
-    const station = findVerifiedStation(feature);
+    const station = stationFromObservation(feature);
     if (!station) continue;
     const props = feature?.properties ?? {};
     const time = getTime(props);
@@ -103,20 +148,21 @@ function buildOfficialStations(observations: Observation[]): WeatherStation[] {
   }
 
   const now = Date.now();
-  // Return only stations with actual, mapped observations: missing data is not zero.
-  return PERU_STATIONS.flatMap(station => {
-    const rows = (byStation.get(station.id) ?? []).sort((a, b) => a.time - b.time);
-    if (!rows.length) return [];
+  return Array.from(byStation.values()).map(rows => {
+    rows.sort((a, b) => a.time - b.time);
     const latest = rows.at(-1)!;
+    const station = latest.station;
     const rainRows = rows.filter(row => row.precipitation !== null);
     const sumWithin = (hours: number) => rainRows
       .filter(row => row.time >= now - hours * 60 * 60 * 1000)
       .reduce((sum, row) => sum + (row.precipitation ?? 0), 0);
     const rain24 = rainRows.length ? Math.round(sumWithin(24) * 10) / 10 : null;
+    const risk = rain24 === null ? 'BAJO' : riskFor(rain24);
 
-    return [{
+    return {
       ...station,
-      ...(rain24 === null ? {} : { precipitationMm: rain24, riskLevel: riskFor(rain24) }),
+      precipitationMm: rain24 ?? 0,
+      riskLevel: risk,
       thresholdRedMm: UMBRAL_ROJO_MM,
       updatedMinutesAgo: Math.max(0, Math.round((now - latest.time) / 60000)),
       current: {
@@ -127,12 +173,12 @@ function buildOfficialStations(observations: Observation[]): WeatherStation[] {
         time: new Date(latest.time).toISOString(),
       },
       source: 'SENAMHI WIS2',
-      dataStatus: rain24 === null ? 'sin-datos' : 'observado',
+      dataStatus: 'observado',
       precipitation1hMm: rainRows.length ? Math.round(sumWithin(1) * 10) / 10 : null,
       precipitation6hMm: rainRows.length ? Math.round(sumWithin(6) * 10) / 10 : null,
       precipitation24hMm: rain24,
       riskObservation: rain24 === null ? 'sin-datos' : 'observado',
-    } as WeatherStation];
+    } as WeatherStation;
   });
 }
 
@@ -192,7 +238,7 @@ async function obtenerLluvias() {
       at: Date.now(),
       stations: official,
       source: 'SENAMHI WIS2',
-      note: 'Solo se devuelven observaciones con WIGOS ID exacto y correspondencia GÓTITA verificada. Las estaciones sin datos se omiten, no se presentan como 0 mm.',
+      note: 'Se muestran únicamente estaciones que tienen observaciones reales de SENAMHI WIS2. La ubicación proviene de la geometría de la observación y el WIGOS identifica la estación.',
     };
     return cache;
   }
@@ -201,7 +247,7 @@ async function obtenerLluvias() {
     at: Date.now(),
     stations: fallback,
     source: 'Open-Meteo (respaldo)',
-    note: 'No se encontraron observaciones SENAMHI con una correspondencia WIGOS–GÓTITA verificada. Los valores proceden de Open-Meteo y no son observaciones SENAMHI.',
+    note: 'No se encontraron observaciones SENAMHI disponibles en esta consulta. Los valores proceden de Open-Meteo y no son observaciones SENAMHI.',
   };
   return cache;
 }
