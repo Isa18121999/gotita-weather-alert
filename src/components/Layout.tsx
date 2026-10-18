@@ -1,5 +1,223 @@
-import React,{useEffect,useState}from'react';import{Menu,X,Ambulance,ArrowUpRight,Flame,ShieldAlert,Siren,CloudRain}from'lucide-react';import{EMERGENCY_SITES,openOfficialSiteOnDesktop}from'../data/stations';
-export type NavPage='inicio'|'mapa'|'alertas'|'noticias';interface NavbarProps{activePage:NavPage;onNavigate:(page:NavPage)=>void};const NAV_LINKS:{id:NavPage;label:string}[]=[{id:'inicio',label:'Inicio'},{id:'mapa',label:'Mapa'},{id:'noticias',label:'Noticias'},{id:'alertas',label:'Alertas'}];
-export const Navbar:React.FC<NavbarProps>=({activePage,onNavigate})=>{const[menuOpen,setMenuOpen]=useState(false);const[scrolled,setScrolled]=useState(false);useEffect(()=>setMenuOpen(false),[activePage]);useEffect(()=>{const onScroll=()=>setScrolled(window.scrollY>0);onScroll();window.addEventListener('scroll',onScroll,{passive:true});return()=>window.removeEventListener('scroll',onScroll)},[]);return <header className={`fixed left-0 right-0 z-40 bg-white/95 backdrop-blur h-16 shadow-sm border-b border-[#e1e8dc] ${scrolled?'top-0':'top-8'}`}><div className="h-full px-4 sm:px-8 lg:px-10 flex items-center justify-between"><div className="flex items-center gap-5 sm:gap-10"><button onClick={()=>onNavigate('inicio')} className="flex items-center gap-2" aria-label="Ir a inicio"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#286b2b] text-white"><CloudRain className="w-6 h-6"/></span><span className="text-[1.25rem] font-bold text-[#111827] tracking-tight">GÓTITA</span></button><nav className="hidden lg:flex items-center gap-6 text-base text-[#111827]">{NAV_LINKS.map(item=><button key={item.id} onClick={()=>onNavigate(item.id)} className={activePage===item.id?'underline decoration-2 decoration-[#286b2b] underline-offset-8 font-semibold':''}>{item.label}</button>)}</nav></div><button onClick={()=>setMenuOpen(v=>!v)} className="lg:hidden p-1 text-[#111827]" aria-label="Menú">{menuOpen?<X/>:<Menu/>}</button></div>{menuOpen&&<nav className="lg:hidden bg-white border-t border-slate-200 px-4 py-3 flex flex-col gap-1 text-lg shadow-lg">{NAV_LINKS.map(item=><button key={item.id} onClick={()=>{onNavigate(item.id);setMenuOpen(false)}} className="w-full text-left px-4 py-2.5">{item.label}</button>)}</nav>}</header>};
-interface FooterProps{onNavigate:(page:NavPage)=>void};const FOOTER_LINKS:{id:NavPage;label:string}[]=[{id:'inicio',label:'Inicio'},{id:'mapa',label:'Mapa'},{id:'noticias',label:'Noticias'},{id:'alertas',label:'Alertas'}];const OFFICIAL_SOURCES=[['SENAMHI','Servicio Nacional de Meteorología e Hidrología','https://www.gob.pe/senamhi'],['INDECI','Instituto Nacional de Defensa Civil','https://www.gob.pe/indeci'],['ENFEN','Comisión Multisectorial del Fenómeno El Niño','https://enfen.imarpe.gob.pe/'],['ANA','Autoridad Nacional del Agua','https://www.ana.gob.pe/']];const EMERGENCY_LINES=[['115','Defensa Civil',EMERGENCY_SITES['115'],ShieldAlert],['116','Bomberos',EMERGENCY_SITES['116'],Flame],['105','Policía',EMERGENCY_SITES['105'],Siren],['106','SAMU',EMERGENCY_SITES['106'],Ambulance]] as const;
-export const Footer:React.FC<FooterProps>=({onNavigate})=><footer className="bg-[#17351d] text-white border-t border-[#c5dcb9] mt-auto"><div className="max-w-[1320px] mx-auto px-4 sm:px-6 lg:px-8 py-8"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 pb-6 border-b border-white/15"><div><h3 className="font-bold">GÓTITA: tu alerta antes de la lluvia</h3><p className="text-sm mt-2 text-slate-300">Plataforma de alerta temprana ante el Fenómeno de El Niño. Monitoreamos lluvia y señales oficiales para ayudar a anticiparte.</p></div><nav><h4 className="font-bold mb-2">Navegación</h4>{FOOTER_LINKS.map(l=><button key={l.id} onClick={()=>onNavigate(l.id)} className="block hover:underline text-sm mb-1">{l.label}</button>)}</nav><div><h4 className="font-bold mb-2">Fuentes Oficiales</h4>{OFFICIAL_SOURCES.map(([name,detail,href])=><a key={name} href={href} target="_blank" rel="noreferrer" className="block text-sm mb-2 hover:underline">{name} <ArrowUpRight className="inline w-3 h-3"/><span className="block text-xs text-slate-400">{detail}</span></a>)}</div><div><h4 className="font-bold mb-2">Líneas de Emergencia</h4><div className="grid grid-cols-2 gap-2">{EMERGENCY_LINES.map(([number,label,href,Icon])=><a key={number} href={`tel:${number}`} onClick={e=>openOfficialSiteOnDesktop(e,href)} className="px-2 py-2 rounded bg-white/10 hover:bg-[#286b2b] text-xs font-bold inline-flex gap-1"><Icon className="w-3.5"/>{label} {number}</a>)}</div></div></div><div className="pt-4 text-xs text-center text-slate-400">© 2026 GÓTITA · La información mostrada es referencial y no reemplaza los avisos oficiales.</div></div></footer>;
+import React, { useEffect, useState } from 'react';
+import { Menu, X, Ambulance, ArrowUpRight, Flame, ShieldAlert, Siren } from 'lucide-react';
+import { EMERGENCY_SITES, openOfficialSiteOnDesktop } from '../data/stations';
+
+export type NavPage = 'inicio' | 'mapa' | 'alertas' | 'noticias';
+
+interface NavbarProps {
+  activePage: NavPage;
+  onNavigate: (page: NavPage) => void;
+}
+
+const NAV_LINKS: { id: NavPage; label: string }[] = [
+  { id: 'inicio', label: 'Inicio' },
+  { id: 'mapa', label: 'Mapa' },
+  { id: 'alertas', label: 'Alertas' },
+  { id: 'noticias', label: 'Noticias' },
+];
+
+const PLUVIX_MEDIA = 'https://raw.githubusercontent.com/Alex-Perales/pluvix/main/public/media';
+
+export const Navbar: React.FC<NavbarProps> = ({ activePage, onNavigate }) => {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => setMenuOpen(false), [activePage]);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 0);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  return (
+    <header
+      className={`fixed left-0 right-0 z-40 bg-black h-16 shadow-sm transition-[top] duration-200 ${
+        scrolled ? 'top-0' : 'top-8'
+      }`}
+    >
+      <div className="h-full px-4 sm:px-8 lg:px-10 flex items-center justify-between gap-3 sm:gap-6">
+        <div className="flex items-center gap-5 sm:gap-10 min-w-0">
+          <button
+            type="button"
+            onClick={() => onNavigate('inicio')}
+            className="flex items-center gap-2 shrink-0 cursor-pointer"
+            aria-label="GÓTITA, ir al inicio"
+          >
+            <img
+              src={`${PLUVIX_MEDIA}/logo-pluvix.png`}
+              alt=""
+              className="h-10 w-auto"
+            />
+            <span className="text-[1.375rem] font-bold text-white">GÓTITA</span>
+          </button>
+
+          <nav aria-label="Navegación de páginas" className="hidden lg:flex items-center gap-6 text-[1.375rem] text-white">
+            {NAV_LINKS.map((item) => {
+              const isActive = activePage === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onNavigate(item.id)}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`transition-colors whitespace-nowrap cursor-pointer hover:text-[#90CAF9] focus:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-sm ${
+                    isActive ? 'underline decoration-white decoration-2 underline-offset-8' : ''
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setMenuOpen((prev) => !prev)}
+          className="lg:hidden p-1 text-white hover:text-[#90CAF9] transition-colors cursor-pointer shrink-0"
+          aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
+          aria-expanded={menuOpen}
+        >
+          {menuOpen ? <X className="w-8 h-8" /> : <Menu className="w-8 h-8" />}
+        </button>
+      </div>
+
+      {menuOpen && (
+        <nav
+          aria-label="Menú desplegable"
+          className="lg:hidden bg-black border-t border-white/20 px-4 sm:px-8 py-3 flex flex-col gap-1 shadow-lg text-[1.375rem] md:max-w-xs md:ml-auto"
+        >
+          {NAV_LINKS.map((item) => {
+            const isActive = activePage === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  onNavigate(item.id);
+                  setMenuOpen(false);
+                }}
+                className={`w-full text-left px-4 py-2.5 rounded-lg transition-colors cursor-pointer ${
+                  isActive ? 'bg-white/15 text-white' : 'text-white hover:bg-white/10'
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+      )}
+    </header>
+  );
+};
+
+interface FooterProps {
+  onNavigate: (page: NavPage) => void;
+}
+
+const FOOTER_LINKS: { id: NavPage; label: string }[] = [
+  { id: 'inicio', label: 'Inicio' },
+  { id: 'mapa', label: 'Mapa' },
+  { id: 'alertas', label: 'Alertas' },
+  { id: 'noticias', label: 'Noticias' },
+];
+
+const OFFICIAL_SOURCES = [
+  {
+    name: 'SENAMHI',
+    detail: 'Servicio Nacional de Meteorología e Hidrología',
+    href: 'https://www.gob.pe/senamhi',
+  },
+  {
+    name: 'INDECI',
+    detail: 'Instituto Nacional de Defensa Civil',
+    href: 'https://www.gob.pe/indeci',
+  },
+  {
+    name: 'ENFEN',
+    detail: 'Comisión Multisectorial del Fenómeno El Niño',
+    href: 'https://enfen.imarpe.gob.pe/',
+  },
+  {
+    name: 'ANA',
+    detail: 'Autoridad Nacional del Agua',
+    href: 'https://www.ana.gob.pe/',
+  },
+];
+
+const EMERGENCY_LINES = [
+  { number: '115', label: 'Defensa Civil', href: EMERGENCY_SITES['115'], Icon: ShieldAlert },
+  { number: '116', label: 'Bomberos', href: EMERGENCY_SITES['116'], Icon: Flame },
+  { number: '105', label: 'Policía', href: EMERGENCY_SITES['105'], Icon: Siren },
+  { number: '106', label: 'SAMU', href: EMERGENCY_SITES['106'], Icon: Ambulance },
+];
+
+export const Footer: React.FC<FooterProps> = ({ onNavigate }) => (
+  <footer className="bg-black text-white border-t border-[#4FC3F7] mt-auto">
+    <div className="max-w-[1320px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-9">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.3fr_0.7fr_1.2fr_1.3fr] gap-6 lg:gap-8 pb-6 border-b border-white/15">
+        <div>
+          <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+            GÓTITA: tu alerta antes de la lluvia
+          </h3>
+          <p className="text-xs sm:text-sm text-white mt-2 leading-relaxed">
+            Plataforma de alerta temprana ante el Fenómeno de El Niño. Monitoreamos las lluvias en la Costa, Sierra y Selva para avisar a tiempo a la población.
+          </p>
+        </div>
+
+        <nav aria-label="Navegación del Footer">
+          <h4 className="text-sm font-bold uppercase tracking-wider text-white mb-2">Navegación</h4>
+          <ul className="space-y-2 text-sm text-white">
+            {FOOTER_LINKS.map((link) => (
+              <li key={link.id}>
+                <button type="button" onClick={() => onNavigate(link.id)} className="hover:underline transition-colors cursor-pointer">
+                  {link.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div>
+          <h4 className="text-sm font-bold uppercase tracking-wider text-white mb-2">Fuentes Oficiales</h4>
+          <ul className="space-y-3">
+            {OFFICIAL_SOURCES.map((source) => (
+              <li key={source.name}>
+                <a href={source.href} target="_blank" rel="noopener noreferrer" className="group inline-block">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-white group-hover:underline transition-colors">
+                    {source.name}
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </span>
+                  <span className="block text-xs text-white">{source.detail}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div>
+          <h4 className="text-sm font-bold uppercase tracking-wider text-white mb-2">Líneas de Emergencia</h4>
+          <div className="grid grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2 text-xs">
+            {EMERGENCY_LINES.map(({ number, label, href, Icon }) => (
+              <a
+                key={number}
+                href={`tel:${number}`}
+                onClick={(e) => openOfficialSiteOnDesktop(e, href)}
+                className="px-2.5 py-2 rounded-lg bg-[#262626] hover:bg-[#1565C0] text-white font-bold transition-colors inline-flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <Icon className="w-3.5 h-3.5 shrink-0" />
+                <span>{label} {number}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="pt-4 text-xs sm:text-xs text-white text-center">
+        <span>&copy; 2026 GÓTITA · La información mostrada es referencial y no reemplaza los avisos oficiales del SENAMHI ni del INDECI.</span>
+      </div>
+    </div>
+  </footer>
+);
