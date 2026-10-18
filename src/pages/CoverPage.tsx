@@ -25,7 +25,7 @@ export function CoverPage({ onEnter }: { onEnter: () => void }) {
           <button
             type="button"
             onClick={onEnter}
-            className="mt-10 inline-flex items-center gap-2 rounded-xl bg-[#1565C0] px-8 py-4 text-lg font-bold text-white shadow-xl transition-all hover:bg-[#0D47A1] hover:scale-[1.03] focus:outline-none focus:ring-4 focus:ring-white/60"
+            className="mt-10 inline-flex items-center gap-2 rounded-xl bg-[#286b2b] px-8 py-4 text-lg font-bold text-white shadow-xl transition-all hover:bg-[#1d5120] hover:scale-[1.03] focus:outline-none focus:ring-4 focus:ring-white/60"
             aria-label="Ingresar a GÓTITA"
           >
             Ingresar
