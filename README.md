@@ -56,7 +56,7 @@ La sesión de AWS Academy debe estar activa y tener permisos del rol `LabRole`. 
 
 ## Fuentes y estado actual
 
-- **SENAMHI:** la API intenta consultar observaciones WIS2. El endpoint productivo puede seguir usando Open-Meteo si las observaciones no se pueden relacionar con suficientes estaciones verificadas.
+- **SENAMHI:** la API solo relaciona observaciones WIS2 con estaciones que tengan un WIGOS ID exacto y mapeo marcado como verificado en `src/data/senamhiStations.ts`. Mientras falta completar ese catálogo, Open-Meteo queda etiquetado como respaldo y no como observación de SENAMHI.
 - **ANA:** falta completar la validación del endpoint público y el mapeo de estaciones para niveles y caudales.
 - **ENFEN:** comunicados oficiales sobre el fenómeno El Niño.
 - **INDECI:** emergencias y gestión reactiva, incluidos registros SINPAD.
@@ -64,7 +64,7 @@ La sesión de AWS Academy debe estar activa y tener permisos del rol `LabRole`. 
 
 ## Próximas tareas técnicas
 
-1. Obtener y verificar los identificadores reales de estaciones WIS2 para mapear observaciones de SENAMHI de forma inequívoca.
+1. Consultar el catálogo oficial `stations` de SENAMHI WIS2, confirmar los WIGOS ID reales y completar el mapeo estación por estación.
 2. Confirmar la semántica de los campos de precipitación WIS2 antes de informar acumulados horarios o de 24 horas.
 3. Indicar estado, procedencia y antigüedad por estación; no representar la falta de datos como 0 mm ni como dato oficial.
 4. Validar endpoint y códigos de estaciones ANA.
