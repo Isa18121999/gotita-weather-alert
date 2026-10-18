@@ -65,6 +65,7 @@ export const handler = async (event: any) => {
   const alert = getBody(event);
   const validationError = validateAlert(alert);
   if (validationError) return json(400, { error: validationError });
+  if (!alert) return json(400, { error: 'Alerta inválida.' });
 
   const baseUrl = process.env.KAFKA_REST_BASE_URL?.replace(/\/$/, '');
   const username = process.env.KAFKA_USERNAME;
