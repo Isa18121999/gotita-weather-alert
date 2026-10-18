@@ -2,6 +2,26 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: GÓTITA backend (API Gateway + Lambda) para frontend alojado en Render.
 
+Parameters:
+  KafkaRestBaseUrl:
+    Type: String
+    Default: ''
+    Description: Base URL de Kafka REST de Aiven, sin /topics al final.
+  KafkaUsername:
+    Type: String
+    Default: ''
+    Description: Usuario del servicio Kafka de Aiven.
+  KafkaPassword:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Contraseña del servicio Kafka de Aiven.
+  AlertPublishToken:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Token secreto para autorizar la publicación de alertas en GÓTITA.
+
 Globals:
   Function:
     Runtime: nodejs22.x
@@ -19,8 +39,8 @@ Resources:
     Properties:
       StageName: $default
       CorsConfiguration:
-        AllowMethods: [GET, OPTIONS]
-        AllowHeaders: [Content-Type]
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowHeaders: [Content-Type, x-gotita-alert-token]
         AllowOrigins: ['*']
 
   WeatherFunction:
@@ -138,6 +158,36 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         EntryPoints: [api/noticias.ts]
+        Format: esm
+        Target: es2022
+        Minify: true
+        Sourcemap: true
+        OutExtension: ['.js=.mjs']
+
+  AlertasFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: api/alertas.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/LabRole'
+      Environment:
+        Variables:
+          KAFKA_REST_BASE_URL: !Ref KafkaRestBaseUrl
+          KAFKA_USERNAME: !Ref KafkaUsername
+          KAFKA_PASSWORD: !Ref KafkaPassword
+          KAFKA_TOPIC: gotita-alertas
+          ALERT_PUBLISH_TOKEN: !Ref AlertPublishToken
+      Events:
+        PublishAlert:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref GotitaApi
+            Path: /api/alertas
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [api/alertas.ts]
         Format: esm
         Target: es2022
         Minify: true
