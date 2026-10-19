@@ -25,7 +25,7 @@ function isHydrometeorological(value: unknown) {
 export async function obtenerEmergenciasIndeci() {
   const params = new URLSearchParams({
     where: '1=1',
-    outFields: 'IDE_SINPAD,FENOMENO,DES_GRUPAL_FENOMENO,DEPARTAMENTO,PROVINCIA,DISTRITO,REGION,FECHA,OBJECTID',
+    outFields: 'IDE_SINPAD,FENOMENO,DES_GRUPAL_FENOMENO,DEPARTAMENTO,PROVINCIA,DISTRITO,REGION,FECHA,FLG_SITUACION,OBJECTID',
     returnGeometry: 'true',
     outSR: '4326',
     resultRecordCount: '100',
@@ -43,7 +43,7 @@ export async function obtenerEmergenciasIndeci() {
     generatedAt: new Date().toISOString(),
     totalReturned: features.length,
     features: hydrometeorological,
-    note: 'Registros consultados desde el servicio oficial de emergencias SINPAD y filtrados a fenómenos hidrometeorológicos relevantes para GÓTITA.',
+    note: 'Registros consultados desde el servicio oficial de emergencias SINPAD y filtrados a fenómenos hidrometeorológicos relevantes para GÓTITA. Se incluye FLG_SITUACION para distinguir registros ACTIVO/CERRADO cuando el servicio lo proporcione.',
   };
 }
 
