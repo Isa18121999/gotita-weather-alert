@@ -10,16 +10,30 @@ type IndeciFeature = { properties?: { IDE_SINPAD?: string | number; FENOMENO?: s
 function parseIndeciDate(value: string | number | undefined): Date | null {
   if (value === undefined || value === null || value === '') return null;
 
-  if (typeof value === 'number' || (typeof value === 'string' && /^\d{10,13}$/.test(value.trim()))) {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return null;
-    const epochMs = Math.abs(numeric) < 1e12 ? numeric * 1000 : numeric;
+  // Si ArcGIS entrega un número, se interpreta en milisegundos, su formato estándar.
+  if (typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const text = value.trim();
+  if (!text) return null;
+
+  // Algunas capas serializan el epoch como una cadena numérica.
+  if (/^\d{10,13}$/.test(text)) {
+    const numeric = Number(text);
+    const epochMs = text.length === 10 ? numeric * 1000 : numeric;
     const date = new Date(epochMs);
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
-  const text = String(value).trim();
-  // Admite fechas ISO y las fechas legibles enviadas por la fuente.
+  // Formato común de ArcGIS Date: YYYY-MM-DD HH:mm:ss (sin zona horaria).
+  const arcGisDateTime = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(text);
+  if (arcGisDateTime) {
+    const [, year, month, day, hour, minute, second = '0'] = arcGisDateTime;
+    return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  }
+
   const parsed = new Date(text);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
