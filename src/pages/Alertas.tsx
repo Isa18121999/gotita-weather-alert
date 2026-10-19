@@ -5,12 +5,37 @@ import { API_URL } from '../data/weather';
 
 type IndeciFeature = { properties?: { IDE_SINPAD?: string | number; FENOMENO?: string; DES_GRUPAL_FENOMENO?: string; DEPARTAMENTO?: string; PROVINCIA?: string; DISTRITO?: string; REGION?: string | null; FECHA?: string | number } };
 
+// ArcGIS normalmente devuelve FECHA como epoch en milisegundos.
+// Se tratan cadenas numéricas de 10 dígitos como segundos y de 13 dígitos como milisegundos.
+function parseIndeciDate(value: string | number | undefined): Date | null {
+  if (value === undefined || value === null || value === '') return null;
+
+  if (typeof value === 'number' || (typeof value === 'string' && /^\d{10,13}$/.test(value.trim()))) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return null;
+    const epochMs = Math.abs(numeric) < 1e12 ? numeric * 1000 : numeric;
+    const date = new Date(epochMs);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const text = String(value).trim();
+  // Admite fechas ISO y las fechas legibles enviadas por la fuente.
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function formatIndeciDate(value: string | number | undefined): string {
-  if (value === undefined || value === null || value === '') return 'Sin fecha';
-  const numeric = typeof value === 'number' ? value : /^\d{10,13}$/.test(value.trim()) ? Number(value) : NaN;
-  const date = Number.isFinite(numeric) ? new Date(numeric < 1e12 ? numeric * 1000 : numeric) : new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Fecha no disponible';
-  return new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Lima' }).format(date);
+  const date = parseIndeciDate(value);
+  if (!date) return value === undefined || value === null || value === '' ? 'Sin fecha' : 'Fecha no disponible';
+  return new Intl.DateTimeFormat('es-PE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'America/Lima',
+  }).format(date);
 }
 
 function formatQueryDate(value: string | undefined): string {
