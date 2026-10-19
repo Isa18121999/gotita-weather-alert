@@ -25,7 +25,7 @@ function isHydrometeorological(value: unknown) {
 export async function obtenerEmergenciasIndeci() {
   const params = new URLSearchParams({
     where: '1=1',
-    outFields: 'IDE_SINPAD,FENOMENO,DES_GRUPAL_FENOMENO,DEPARTAMENTO,PROVINCIA,DISTRITO,REGION,FECHA',
+    outFields: 'IDE_SINPAD,FENOMENO,DES_GRUPAL_FENOMENO,DEPARTAMENTO,PROVINCIA,DISTRITO,REGION,FECHA,OBJECTID',
     returnGeometry: 'true',
     outSR: '4326',
     resultRecordCount: '100',
