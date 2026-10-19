@@ -5,35 +5,24 @@ import { API_URL } from '../data/weather';
 
 type IndeciFeature = { properties?: { IDE_SINPAD?: string | number; FENOMENO?: string; DES_GRUPAL_FENOMENO?: string; DEPARTAMENTO?: string; PROVINCIA?: string; DISTRITO?: string; REGION?: string | null; FECHA?: string | number } };
 
-// ArcGIS normalmente devuelve FECHA como epoch en milisegundos.
-// Se tratan cadenas numéricas de 10 dígitos como segundos y de 13 dígitos como milisegundos.
 function parseIndeciDate(value: string | number | undefined): Date | null {
   if (value === undefined || value === null || value === '') return null;
-
-  // Si ArcGIS entrega un número, se interpreta en milisegundos, su formato estándar.
   if (typeof value === 'number') {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
   }
-
   const text = value.trim();
   if (!text) return null;
-
-  // Algunas capas serializan el epoch como una cadena numérica.
   if (/^\d{10,13}$/.test(text)) {
     const numeric = Number(text);
-    const epochMs = text.length === 10 ? numeric * 1000 : numeric;
-    const date = new Date(epochMs);
+    const date = new Date(text.length === 10 ? numeric * 1000 : numeric);
     return Number.isNaN(date.getTime()) ? null : date;
   }
-
-  // Formato común de ArcGIS Date: YYYY-MM-DD HH:mm:ss (sin zona horaria).
   const arcGisDateTime = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(text);
   if (arcGisDateTime) {
     const [, year, month, day, hour, minute, second = '0'] = arcGisDateTime;
     return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
   }
-
   const parsed = new Date(text);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
@@ -42,13 +31,7 @@ function formatIndeciDate(value: string | number | undefined): string {
   const date = parseIndeciDate(value);
   if (!date) return value === undefined || value === null || value === '' ? 'Sin fecha' : 'Fecha no disponible';
   return new Intl.DateTimeFormat('es-PE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'America/Lima',
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Lima',
   }).format(date);
 }
 
@@ -100,10 +83,16 @@ export function AlertasPage({ stations, onViewStationOnMap, onRefreshStations, d
     return !historySearch || `${p.FENOMENO || ''} ${p.DEPARTAMENTO || ''} ${p.PROVINCIA || ''} ${p.DISTRITO || ''}`.toLowerCase().includes(historySearch.toLowerCase());
   }), [filteredIndeci, historySearch]);
 
+  const latestRecordDate = useMemo(() => {
+    const timestamps = filteredHistory.map(feature => parseIndeciDate(feature.properties?.FECHA)?.getTime() ?? NaN).filter(Number.isFinite);
+    if (!timestamps.length) return null;
+    return new Date(Math.max(...timestamps));
+  }, [filteredHistory]);
+
   const stationAlerts = stations.filter(s => s.riskLevel !== 'BAJO' && s.riskObservation !== 'sin-datos');
 
   const exportCsv = () => {
-    const rows = [['Fecha', 'Departamento', 'Provincia', 'Distrito', 'Tipo de alerta', 'Fuente'],
+    const rows = [['Fecha del registro INDECI', 'Departamento', 'Provincia', 'Distrito', 'Tipo de emergencia', 'Fuente'],
       ...filteredHistory.map(feature => {
         const p = feature.properties || {};
         return [formatIndeciDate(p.FECHA), p.DEPARTAMENTO || 'Perú', p.PROVINCIA || '', p.DISTRITO || '', p.FENOMENO || 'Emergencia hidrometeorológica', 'INDECI SINPAD'];
@@ -129,11 +118,12 @@ export function AlertasPage({ stations, onViewStationOnMap, onRefreshStations, d
     <p className="text-sm text-slate-500 mt-2">Los niveles de GÓTITA son experimentales y no representan avisos oficiales de SENAMHI.</p>
     <div className="mt-4 space-y-3">{stationAlerts.length === 0 ? <div className="rounded-lg bg-[#E3F2FD] border border-[#BBDEFB] p-6"><b>No hay observaciones suficientes para presentar un indicador GÓTITA medio o alto.</b><p className="text-sm text-slate-600 mt-1">Esto no significa que no existan avisos oficiales. Consulta SENAMHI e INDECI.</p></div> : stationAlerts.map(station => <article key={station.id} className={`rounded-lg border-l-4 ${station.riskLevel === 'ALTO' ? 'border-red-500' : 'border-amber-500'} border border-slate-200 p-5 bg-white shadow-sm`}><div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4"><div><p className={`text-xs font-bold ${station.riskLevel === 'ALTO' ? 'text-red-600' : 'text-amber-600'}`}>RIESGO {station.riskLevel} · INDICADOR GÓTITA</p><h3 className="font-bold text-lg mt-1">Monitoreo de precipitaciones en {station.department}</h3><p className="text-sm text-slate-600 mt-2">Estación {station.name}. Precipitación: {station.precipitation24hMm == null ? 'sin acumulado válido de 24 h' : `${Number(station.precipitation24hMm).toFixed(1)} mm`}.</p><p className="text-xs text-slate-500 mt-3">Cuenca: {station.basin} · Región: {station.region} · Fuente: {station.source || 'no indicada'}</p></div><button onClick={() => onViewStationOnMap(station)} className="px-3 py-2 rounded-lg bg-[#1565C0] hover:bg-[#0D47A1] text-white text-sm">Ver en mapa</button></div></article>)}</div>
 
-    <div className="mt-5 rounded-lg border border-[#BBDEFB] p-5"><div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between"><div><h3 className="font-bold">Emergencias INDECI · SINPAD</h3><p className="text-xs text-slate-500">Registros oficiales consultados en la respuesta actual del servicio SINPAD. No implica que cada registro sea una alerta activa.</p></div><a href="https://geosinpad.indeci.gob.pe/indeci/rest/services/Emergencias" target="_blank" rel="noreferrer" className="text-[#1565C0] text-sm inline-flex items-center gap-1">Fuente oficial <ExternalLink className="w-3"/></a></div>
+    <div className="mt-5 rounded-lg border border-[#BBDEFB] p-5"><div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between"><div><h3 className="font-bold">Emergencias INDECI · SINPAD</h3><p className="text-xs text-slate-500">Registros oficiales consultados en la respuesta actual del servicio SINPAD. La fecha de cada registro es la que entrega INDECI; no implica que sea una alerta activa.</p></div><a href="https://geosinpad.indeci.gob.pe/indeci/rest/services/Emergencias" target="_blank" rel="noreferrer" className="text-[#1565C0] text-sm inline-flex items-center gap-1">Fuente oficial <ExternalLink className="w-3"/></a></div>
     <div className="grid md:grid-cols-[1fr_auto_auto] gap-2 mt-4"><div className="relative"><Search className="absolute left-3 top-2.5 w-4 text-slate-400"/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar fenómeno, departamento o distrito" className="w-full border border-[#BBDEFB] rounded-lg pl-9 pr-3 py-2"/></div><select value={region} onChange={e => setRegion(e.target.value)} className="border border-[#BBDEFB] rounded-lg px-3 py-2"><option>Todas</option><option>Costa</option><option>Sierra</option><option>Selva</option></select><button onClick={exportCsv} className="px-3 py-2 rounded-lg border border-[#90CAF9] inline-flex items-center gap-1 hover:bg-[#E3F2FD]"><Download className="w-4"/>Exportar CSV</button></div>
-    <div className="mt-3 max-h-64 overflow-auto space-y-2">{filteredIndeci.length ? filteredIndeci.slice(0, 20).map((feature, i) => { const p = feature.properties || {}; return <div key={String(p.IDE_SINPAD || i)} className="rounded-lg bg-[#E3F2FD] p-3 text-sm"><div className="flex items-start gap-2"><MapPin className="w-4 text-[#1565C0] mt-0.5"/><div><b>{p.FENOMENO || 'Emergencia hidrometeorológica'}</b><p className="text-xs text-slate-500">{p.DEPARTAMENTO || 'Perú'} · {p.PROVINCIA || ''} · {p.DISTRITO || ''} · {formatIndeciDate(p.FECHA)}</p></div></div></div>; }) : <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">{loading ? 'Consultando SINPAD…' : indeciError ? `No se pudo consultar SINPAD: ${indeciError}` : 'INDECI no devolvió registros hidrometeorológicos en esta consulta.'}</div>}</div><div className="mt-3 flex items-center gap-2 text-xs text-slate-500"><Clock className="w-3.5"/>Última consulta a INDECI: {formatQueryDate(lastUpdated)}</div></div>
+    <div className="mt-3 max-h-64 overflow-auto space-y-2">{filteredIndeci.length ? filteredIndeci.slice(0, 20).map((feature, i) => { const p = feature.properties || {}; return <div key={String(p.IDE_SINPAD || i)} className="rounded-lg bg-[#E3F2FD] p-3 text-sm"><div className="flex items-start gap-2"><MapPin className="w-4 text-[#1565C0] mt-0.5"/><div><b>{p.FENOMENO || 'Emergencia hidrometeorológica'}</b><p className="text-xs text-slate-500">{p.DEPARTAMENTO || 'Perú'} · {p.PROVINCIA || ''} · {p.DISTRITO || ''} · <span className="font-semibold">Fecha del registro: {formatIndeciDate(p.FECHA)}</span></p></div></div></div>; }) : <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">{loading ? 'Consultando SINPAD…' : indeciError ? `No se pudo consultar SINPAD: ${indeciError}` : 'INDECI no devolvió registros hidrometeorológicos en esta consulta.'}</div>}</div><div className="mt-3 flex items-center gap-2 text-xs text-slate-500"><Clock className="w-3.5"/>Última consulta de GÓTITA a INDECI: {formatQueryDate(lastUpdated)}</div></div>
 
-    <div className="mt-10 flex flex-col md:flex-row md:items-end md:justify-between gap-4"><div><p className="text-xs text-[#1565C0] font-bold tracking-widest">REGISTROS DEVUELTOS POR SINPAD</p><h2 className="text-2xl font-bold">Historial de Alertas</h2><p className="text-xs text-slate-500 mt-1">Registros hidrometeorológicos devueltos por la consulta actual de INDECI/SINPAD. Es un historial de emergencias registradas, no una lista de alertas activas.</p></div><div className="flex flex-wrap gap-2"><div className="relative"><Search className="absolute left-3 top-2.5 w-4 text-slate-400"/><input value={historySearch} onChange={e => setHistorySearch(e.target.value)} placeholder="Buscar en historial…" className="border border-[#BBDEFB] rounded-lg pl-9 pr-3 py-2"/></div><button onClick={exportCsv} className="px-3 py-2 rounded-lg border border-[#90CAF9] inline-flex items-center gap-1 hover:bg-[#E3F2FD]"><Download className="w-4"/>Exportar CSV</button></div></div>
-    <div className="mt-4 overflow-x-auto rounded-lg border border-[#BBDEFB]"><table className="w-full text-sm"><thead className="bg-[#E3F2FD]"><tr><th className="text-left p-3">Fecha</th><th className="text-left p-3">Región / provincia</th><th className="text-left p-3">Tipo de alerta</th><th className="text-left p-3">Fuente</th></tr></thead><tbody>{filteredHistory.slice(0, 50).map((feature, i) => { const p = feature.properties || {}; return <tr key={String(p.IDE_SINPAD || i)} className="border-t"><td className="p-3 whitespace-nowrap">{formatIndeciDate(p.FECHA)}</td><td className="p-3">{p.DEPARTAMENTO || 'Perú'} · {p.PROVINCIA || ''}</td><td className="p-3">{p.FENOMENO || 'Emergencia'}</td><td className="p-3 font-semibold text-[#1565C0]">INDECI SINPAD</td></tr>; })}</tbody></table>{!filteredHistory.length && !loading && <div className="p-5 text-sm text-slate-500">{indeciError || 'No hay registros oficiales disponibles para mostrar en este momento.'}</div>}</div>
+    <div className="mt-10 flex flex-col md:flex-row md:items-end md:justify-between gap-4"><div><p className="text-xs text-[#1565C0] font-bold tracking-widest">REGISTROS DEVUELTOS POR SINPAD</p><h2 className="text-2xl font-bold">Historial de Alertas</h2><p className="text-xs text-slate-500 mt-1">Historial de emergencias hidrometeorológicas registradas por INDECI/SINPAD. La columna de fecha corresponde al registro de INDECI, no a la fecha de actualización de GÓTITA.</p></div><div className="flex flex-wrap gap-2"><div className="relative"><Search className="absolute left-3 top-2.5 w-4 text-slate-400"/><input value={historySearch} onChange={e => setHistorySearch(e.target.value)} placeholder="Buscar en historial…" className="border border-[#BBDEFB] rounded-lg pl-9 pr-3 py-2"/></div><button onClick={exportCsv} className="px-3 py-2 rounded-lg border border-[#90CAF9] inline-flex items-center gap-1 hover:bg-[#E3F2FD]"><Download className="w-4"/>Exportar CSV</button></div></div>
+    {latestRecordDate && lastUpdated && latestRecordDate.getTime() < new Date(lastUpdated).getTime() - 24 * 60 * 60 * 1000 && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"><b>Información de actualización:</b> la fuente INDECI está devolviendo registros cuya fecha puede ser anterior a la fecha de consulta de GÓTITA. GÓTITA muestra la fecha oficial del registro sin inventar una fecha más reciente.</div>}
+    <div className="mt-4 overflow-x-auto rounded-lg border border-[#BBDEFB]"><table className="w-full text-sm"><thead className="bg-[#E3F2FD]"><tr><th className="text-left p-3">Fecha del registro INDECI</th><th className="text-left p-3">Región / provincia</th><th className="text-left p-3">Tipo de emergencia</th><th className="text-left p-3">Fuente</th></tr></thead><tbody>{filteredHistory.slice(0, 50).map((feature, i) => { const p = feature.properties || {}; return <tr key={String(p.IDE_SINPAD || i)} className="border-t"><td className="p-3 whitespace-nowrap">{formatIndeciDate(p.FECHA)}</td><td className="p-3">{p.DEPARTAMENTO || 'Perú'} · {p.PROVINCIA || ''}</td><td className="p-3">{p.FENOMENO || 'Emergencia'}</td><td className="p-3 font-semibold text-[#1565C0]">INDECI SINPAD</td></tr>; })}</tbody></table>{!filteredHistory.length && !loading && <div className="p-5 text-sm text-slate-500">{indeciError || 'No hay registros oficiales disponibles para mostrar en este momento.'}</div>}</div>
   </section>;
 }
