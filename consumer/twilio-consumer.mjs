@@ -7,7 +7,6 @@ const {
   KAFKA_PASSWORD,
   KAFKA_TOPIC = 'gotita-alertas',
   KAFKA_CONSUMER_GROUP = 'gotita-twilio',
-  KAFKA_CONSUMER_NAME = 'gotita-twilio-consumer',
   TWILIO_ACCOUNT_SID,
   TWILIO_API_KEY,
   TWILIO_API_SECRET,
@@ -45,19 +44,20 @@ const twilioClient = twilio(TWILIO_API_KEY, TWILIO_API_SECRET, {
   accountSid: TWILIO_ACCOUNT_SID,
 });
 
-let consumerCreated = false;
+let consumerBaseUrl = null;
 let stopping = false;
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function kafkaRequest(path, options = {}) {
-  const response = await fetch(`${kafkaBase}${path}`, {
+async function kafkaRequest(baseUrl, path, options = {}) {
+  const response = await fetch(`${baseUrl}${path}`, {
     ...options,
     headers: {
       Authorization: `Basic ${kafkaAuth}`,
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      Accept: 'application/vnd.kafka.json.v2+json',
+      ...(options.body ? { 'Content-Type': 'application/vnd.kafka.json.v2+json' } : {}),
       ...(options.headers || {}),
     },
   });
@@ -80,33 +80,34 @@ async function kafkaRequest(path, options = {}) {
   return body;
 }
 
-async function ensureConsumer() {
+async function createConsumer() {
+  const consumerName = `gotita-twilio-${Date.now()}-${process.pid}`;
   const path = `/consumers/${encodeURIComponent(KAFKA_CONSUMER_GROUP)}`;
   const createBody = {
-    name: KAFKA_CONSUMER_NAME,
+    name: consumerName,
     format: 'json',
     'auto.offset.reset': 'earliest',
     'auto.commit.enable': 'true',
   };
 
-  try {
-    await kafkaRequest(path, {
-      method: 'POST',
-      body: JSON.stringify(createBody),
-    });
-    console.log(`Kafka consumer creado: ${KAFKA_CONSUMER_GROUP}/${KAFKA_CONSUMER_NAME}`);
-  } catch (error) {
-    if (error.status !== 409) throw error;
-    console.log(`Kafka consumer ya existe: ${KAFKA_CONSUMER_GROUP}/${KAFKA_CONSUMER_NAME}`);
+  const created = await kafkaRequest(kafkaBase, path, {
+    method: 'POST',
+    body: JSON.stringify(createBody),
+  });
+
+  const baseUri = created?.base_uri;
+  if (!baseUri) {
+    throw new Error('Kafka no devolvió base_uri para el consumer.');
   }
 
-  consumerCreated = true;
+  consumerBaseUrl = new URL(baseUri, kafkaBase).toString().replace(/\/$/, '');
+  console.log(`Kafka consumer creado: ${consumerName}`);
 
-  const subscriptionPath = `/consumers/${encodeURIComponent(KAFKA_CONSUMER_GROUP)}/instances/${encodeURIComponent(KAFKA_CONSUMER_NAME)}/subscription`;
-  await kafkaRequest(subscriptionPath, {
+  await kafkaRequest(consumerBaseUrl, '/subscription', {
     method: 'POST',
     body: JSON.stringify({ topics: [KAFKA_TOPIC] }),
   });
+
   console.log(`Suscrito al topic Kafka: ${KAFKA_TOPIC}`);
 }
 
@@ -163,11 +164,12 @@ async function processRecord(record) {
 }
 
 async function consumeLoop() {
-  const recordsPath = `/consumers/${encodeURIComponent(KAFKA_CONSUMER_GROUP)}/instances/${encodeURIComponent(KAFKA_CONSUMER_NAME)}/records?timeout=10000`;
-
   while (!stopping) {
     try {
-      const records = await kafkaRequest(recordsPath, { method: 'GET' });
+      const records = await kafkaRequest(consumerBaseUrl, '/records?timeout=10000', {
+        method: 'GET',
+      });
+
       if (Array.isArray(records)) {
         for (const record of records) {
           await processRecord(record);
@@ -176,8 +178,13 @@ async function consumeLoop() {
     } catch (error) {
       console.error('Error consumiendo Kafka:', error?.status ?? error?.message ?? error);
       await sleep(5000);
-      if (!consumerCreated && !stopping) {
-        await ensureConsumer();
+
+      if (!stopping) {
+        try {
+          await createConsumer();
+        } catch (recoveryError) {
+          console.error('No se pudo recrear el consumer Kafka:', recoveryError?.body ?? recoveryError?.message ?? recoveryError);
+        }
       }
     }
   }
@@ -188,10 +195,9 @@ async function stop(signal) {
   stopping = true;
   console.log(`Recibido ${signal}. Cerrando consumidor...`);
 
-  if (consumerCreated) {
-    const path = `/consumers/${encodeURIComponent(KAFKA_CONSUMER_GROUP)}/instances/${encodeURIComponent(KAFKA_CONSUMER_NAME)}`;
+  if (consumerBaseUrl) {
     try {
-      await kafkaRequest(path, { method: 'DELETE' });
+      await kafkaRequest(consumerBaseUrl, '', { method: 'DELETE' });
     } catch (error) {
       console.warn('No se pudo eliminar el consumer de Kafka:', error?.status ?? error?.message ?? error);
     }
@@ -218,7 +224,7 @@ process.on('SIGTERM', () => void stop('SIGTERM'));
 process.on('SIGINT', () => void stop('SIGINT'));
 
 try {
-  await ensureConsumer();
+  await createConsumer();
   await consumeLoop();
 } catch (error) {
   console.error('No se pudo iniciar el consumidor GÓTITA:', error?.body ?? error?.message ?? error);
