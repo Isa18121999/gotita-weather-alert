@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
+    "consumer": "node consumer/twilio-consumer.mjs",
     "aws:build": "sam build --template-file template.yaml",
     "aws:deploy": "bash scripts/deploy-aws.sh"
   },
@@ -19,6 +20,7 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "tailwindcss": "^4.3.3",
+    "twilio": "^5.10.6",
     "vite": "^8.3.0"
   },
   "devDependencies": {
