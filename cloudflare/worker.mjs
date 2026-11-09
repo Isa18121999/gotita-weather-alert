@@ -10,7 +10,7 @@ function basicAuth(username, password) {
 }
 
 async function kafkaRequest(env, baseUrl, path, options = {}) {
-  const response = await fetch(`${baseUrl.replace(/\\/$/, "")}${path}`, {
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
     ...options,
     headers: {
       Authorization: basicAuth(env.KAFKA_USERNAME, env.KAFKA_PASSWORD),
@@ -96,7 +96,7 @@ async function runPoll(env) {
     "TWILIO_API_SECRET", "TWILIO_FROM_NUMBER",
   ]);
   const toNumbers = recipients(env);
-  const base = env.KAFKA_REST_BASE_URL.replace(/\\/$/, "");
+  const base = env.KAFKA_REST_BASE_URL.replace(/\/$/, "");
   const group = env.KAFKA_CONSUMER_GROUP || "gotita-twilio-cloudflare";
   const minLevel = LEVEL_ORDER[String(env.TWILIO_MIN_LEVEL || "MEDIO").toUpperCase()] || 2;
   const instance = `gotita-cf-${Date.now()}-${crypto.randomUUID()}`;
@@ -114,7 +114,7 @@ async function runPoll(env) {
       }),
     });
     if (!created?.base_uri) throw new Error("Kafka REST did not return base_uri.");
-    consumerUrl = new URL(created.base_uri, base).toString().replace(/\\/$/, "");
+    consumerUrl = new URL(created.base_uri, base).toString().replace(/\/$/, "");
 
     await kafkaRequest(env, consumerUrl, "/subscription", {
       method: "POST",
