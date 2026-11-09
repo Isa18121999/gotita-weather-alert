@@ -1,0 +1,6 @@
+name = "gotita-kafka-twilio"
+main = "worker.mjs"
+compatibility_date = "2026-11-09"
+
+[triggers]
+crons = ["* * * * *"]
