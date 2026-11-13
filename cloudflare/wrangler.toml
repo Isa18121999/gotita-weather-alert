@@ -4,3 +4,9 @@ compatibility_date = "2026-11-09"
 
 [triggers]
 crons = ["* * * * *"]
+
+[vars]
+KAFKA_TOPIC = "gotita-alertas"
+KAFKA_CONSUMER_GROUP = "gotita-twilio-cloudflare"
+KAFKA_AUTO_OFFSET_RESET = "latest"
+TWILIO_MIN_LEVEL = "MEDIO"
