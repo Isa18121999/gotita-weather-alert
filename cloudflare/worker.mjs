@@ -14,8 +14,8 @@ async function kafkaRequest(env, baseUrl, path, options = {}) {
     ...options,
     headers: {
       Authorization: basicAuth(env.KAFKA_USERNAME, env.KAFKA_PASSWORD),
-      Accept: "application/vnd.kafka.json.v2+json",
-      ...(options.body ? { "Content-Type": "application/vnd.kafka.json.v2+json" } : {}),
+      Accept: options.accept || "application/vnd.kafka.v2+json",
+      ...(options.body ? { "Content-Type": "application/vnd.kafka.v2+json" } : {}),
       ...(options.headers || {}),
     },
   });
@@ -121,7 +121,10 @@ async function runPoll(env) {
       body: JSON.stringify({ topics: [env.KAFKA_TOPIC] }),
     });
 
-    const records = await kafkaRequest(env, consumerUrl, "/records?timeout=1000", { method: "GET" });
+    const records = await kafkaRequest(env, consumerUrl, "/records?timeout=1000", {
+      method: "GET",
+      accept: "application/vnd.kafka.json.v2+json",
+    });
     let sent = 0;
     let ignored = 0;
 
